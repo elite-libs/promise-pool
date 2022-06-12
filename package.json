@@ -1,0 +1,53 @@
+{
+  "name": "@elite-libs/promise-pool",
+  "version": "1.0.0",
+  "description": "Configurable async task queue, w/ throttling, retries, progress, error handling.",
+  "keywords": [],
+  "type": "commonjs",
+  "homepage": "https://github.com/elite-libs/promise-pool",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/elite-libs/promise-pool.git"
+  },
+  "source": "./src/index.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "browser": "./dist/index.global.js",
+  "types": "./dist/index.d.ts",
+  "private": false,
+  "packageManager": "npm@8.11.0",
+  "engineStrict": true,
+  "engines": {
+    "npm": ">=6",
+    "node": ">=12.0.0"
+  },
+  "scripts": {
+    "prepublishOnly": "NODE_ENV=production BUNDLE_ALL=true npm run build",
+    "release:npm": "npm publish --access public --registry https://registry.npmjs.org/",
+    "release:github": "npm publish --access public --registry https://npm.pkg.github.com/",
+    "test": "npm run build && jest",
+    "test:coverage": "npm run build && jest --coverage",
+    "build": "npx rimraf ./dist/* && npm run build:bundle",
+    "build:bundle": "npx tsup && cp dist/index.js dist/index.cjs",
+    "format": "eslint --fix ."
+  },
+  "author": {
+    "name": "@justsml",
+    "url": "https://danlevy.net"
+  },
+  "license": "BSD-3-Clause",
+  "files": [
+    "dist",
+    "*.md"
+  ],
+  "devDependencies": {
+    "@types/jest": "^28.1.1",
+    "@types/lodash": "^4.14.182",
+    "@types/node": "^17.0.42",
+    "jest": "^28.1.1",
+    "ts-jest": "^28.0.4",
+    "ts-node": "^10.8.1",
+    "tsup": "^6.1.2",
+    "typescript": "^4.4.4"
+  }
+}
