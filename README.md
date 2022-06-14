@@ -1,9 +1,17 @@
+# Promise Pool
 
-# Features
+A modern task queue built with generators, atomics, shared array buffers, and `Promise.allSettled`.
 
-- [ ] Configurable 
+## Features
 
-# Naming & Abbreviation Ideas 
+- [ ] Configurable:
+  - [ ] Concurrency limit.
+  - [ ] Retries.
+  - [ ] Progress.
+  - [ ] Error handling.
+
+<!-- # Naming & Abbreviation Ideas 
+
 | Abbrev. | Name |
 |-|-|
 | ASS Pool | **Async Streaming Service Pool** (though I think Hard Rock Hotel snagged this a while ago...) |
@@ -20,12 +28,11 @@
 | PASS Pool  | **Promise, Async, Streaming, Service Pool** |
 | SPAAT | **Streaming promise, async, await throttling** |
 | SAAP | **Streaming async & await, pool service!** |
+ -->
 
-
-
-
+<!-- 
 ## MVP
 
 1. Create an instance on ASS Class
 1. TDD/design interfaces
-
+ -->

@@ -1,6 +1,10 @@
 {
+  "buildOptions": {
+    "incremental": true,
+  },
   "compilerOptions": {
     "allowJs": true,
+    "checkJs": true,
     "allowSyntheticDefaultImports": true,
     "alwaysStrict": true,
     "baseUrl": ".",
@@ -8,16 +12,19 @@
     "declaration": true,
     "declarationMap": true,
     // "declarationDir": "./dist/types",
-
+    "incremental": true,
+    "composite": true,
+    "listEmittedFiles": true,
+    "noUncheckedIndexedAccess": false,
+    "preserveConstEnums": true,
+    "tsBuildInfoFile": ".temp/.tsbuildinfo",
+    
     "esModuleInterop": true,
-    // "extendedDiagnostics": true,
     "forceConsistentCasingInFileNames": true,
-    // "isolatedModules": true,
-    // "jsx": "preserve",
+    "isolatedModules": true,
     // "lib": ["esnext"],
     "module": "esnext",
     "moduleResolution": "node",
-    // "noEmit": true,
     "noFallthroughCasesInSwitch": true,
     "outDir": "dist",
     "resolveJsonModule": true,
@@ -25,9 +32,26 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
+    "strictBindCallApply": true,
+    "diagnostics": true,
+    "paths": {
+      "@*": [
+        "src/*"
+      ]
+    },
     "target": "ES2019",
     "useUnknownInCatchVariables": false
   },
-  "include": ["**/*.ts", "./.*.js"],
-  "exclude": ["**/node_modules", "__snapshots__", "**/dist"]
+  "include": [
+    "**/*.ts",
+    "**/*.js"
+  ],
+  "exclude": [
+    "__mocks__",
+    "__snapshots__",
+    // "**/*.test.js",
+    // "**/*.test.ts",
+    "dist",
+    "node_modules",
+  ]
 }
