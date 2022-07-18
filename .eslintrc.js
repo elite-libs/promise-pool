@@ -1,4 +1,5 @@
-/** @type {import('eslint').Rule.RuleModule} */module.exports = {
+/** @type {import('eslint').Rule.RuleModule} */
+module.exports = {
   env: {
     browser: true,
     es2021: true,
@@ -19,24 +20,23 @@
   },
   plugins: ['@typescript-eslint'],
   rules: {
-    'max-len': [
-      'error',
-      {
-        code: 80,
-        tabWidth: 2,
-        ignoreUrls: true,
-        ignoreRegExpLiterals: true,
-        ignoreTemplateLiterals: true,
-        ignoreComments: true,
-        ignoreTrailingComments: true,
-      },
-    ],
+    // 'max-len': [
+    //   'error',
+    //   {
+    //     code: 80,
+    //     tabWidth: 2,
+    //     ignoreUrls: true,
+    //     ignoreRegExpLiterals: true,
+    //     ignoreTemplateLiterals: true,
+    //     ignoreComments: true,
+    //     ignoreTrailingComments: true,
+    //   },
+    // ],
     'array-bracket-newline': [
       'error',
       {
         multiline: true,
         minItems: 2,
-
       },
     ],
     'object-curly-newline': [
@@ -44,10 +44,12 @@
       {
         ObjectExpression: 'always',
         ObjectPattern: {
-          multiline: true, minProperties: 2,
+          multiline: true,
+          minProperties: 2,
         },
         ImportDeclaration: {
-          multiline: true, minProperties: 2,
+          multiline: true,
+          minProperties: 2,
         },
         ExportDeclaration: 'never',
       },
@@ -55,53 +57,43 @@
     'function-paren-newline': [
       'error',
       {
-        minItems: 2,
+        minItems: 3,
       },
     ],
     'array-element-newline': [
       'error',
       {
         ArrayExpression: {
-          minItems: 2, multiline: true,
+          minItems: 2,
+          multiline: true,
         },
         // "consistent",
         ArrayPattern: {
-          minItems: 2, multiline: true,
+          minItems: 2,
+          multiline: true,
         },
       },
     ],
-    'lines-between-class-members': [
-      'error',
-      'always',
-      {
-        exceptAfterSingleLine: true,
-      },
-    ],
-    'padding-line-between-statements': [
-      'error',
-      {
-        blankLine: 'always',
-        prev: [
-          'const',
-          'let',
-          'var',
-        ],
-        next: '*',
-      },
-      {
-        blankLine: 'any',
-        prev: [
-          'const',
-          'let',
-          'var',
-        ],
-        next: [
-          'const',
-          'let',
-          'var',
-        ],
-      },
-    ],
+    // 'lines-between-class-members': [
+    //   'error',
+    //   'always',
+    //   {
+    //     exceptAfterSingleLine: true,
+    //   },
+    // ],
+    // 'padding-line-between-statements': [
+    //   'error',
+    //   {
+    //     blankLine: 'always',
+    //     prev: ['const', 'let', 'var'],
+    //     next: '*',
+    //   },
+    //   {
+    //     blankLine: 'any',
+    //     prev: ['const', 'let', 'var'],
+    //     next: ['const', 'let', 'var'],
+    //   },
+    // ],
     'no-use-before-define': [
       'error',
       {
@@ -111,12 +103,7 @@
         variables: false,
       },
     ],
-    '@typescript-eslint/no-use-before-define': [
-      'error',
-      {
-        ignoreTypeReferences: true,
-      },
-    ],
+    '@typescript-eslint/no-use-before-define': 'off',
     '@typescript-eslint/no-misused-new': 'error',
     '@typescript-eslint/no-inferrable-types': 'error',
     '@typescript-eslint/member-delimiter-style': [
@@ -140,24 +127,20 @@
         prefer: 'type-imports',
       },
     ],
-    '@typescript-eslint/consistent-indexed-object-style': [
-      'error',
-      'record',
-    ],
+    '@typescript-eslint/consistent-indexed-object-style': ['error', 'record'],
 
     '@typescript-eslint/member-ordering': [
       'error',
       {
-        default:
-          [
-            'public-static-field',
-            'static-field',
-            'instance-field',
-            'signature',
-            'method',
-            'constructor',
-            'field',
-          ],
+        default: [
+          'public-static-field',
+          'static-field',
+          'instance-field',
+          'signature',
+          'method',
+          'constructor',
+          'field',
+        ],
       },
     ],
 

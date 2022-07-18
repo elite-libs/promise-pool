@@ -1,14 +1,9 @@
-import type {
-  Format, Options,
-} from 'tsup';
+import type { Format, Options } from 'tsup';
 
-const format: Format[] = [
-  'cjs',
-  'esm',
-  'iife',
-];
+const format: Format[] = ['cjs', 'esm', 'iife'];
 
-const env: 'production' | 'development' = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+const env: 'production' | 'development' =
+  process.env.NODE_ENV === 'production' ? 'production' : 'development';
 const isProd = env === 'production';
 
 const singleBundleFile = process.env.BUNDLE_ALL != null;
@@ -28,9 +23,5 @@ export default {
   skipNodeModulesBundle: singleBundleFile,
   sourcemap: true,
   // splitting: false,//
-  noExternal: [
-    /lodash\/.*/,
-    'ms',
-    /expressionparser\/.*/,
-  ],
+  noExternal: [/lodash\/.*/, 'ms', /expressionparser\/.*/],
 } as Options;

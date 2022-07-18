@@ -7,11 +7,10 @@
     "checkJs": true,
     "allowSyntheticDefaultImports": true,
     "alwaysStrict": true,
+    "importHelpers": true,
     "baseUrl": ".",
-
     "declaration": true,
     "declarationMap": true,
-    // "declarationDir": "./dist/types",
     "incremental": true,
     "composite": true,
     "listEmittedFiles": true,
@@ -22,7 +21,13 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    // "lib": ["esnext"],
+    "lib": [
+      "esnext",
+      "ESNext.AsyncIterable",
+      "ESNext.Promise",
+      "ES2015.Collection",
+      "ES2018.AsyncGenerator"
+    ],
     "module": "esnext",
     "moduleResolution": "node",
     "noFallthroughCasesInSwitch": true,
@@ -39,7 +44,7 @@
         "src/*"
       ]
     },
-    "target": "ES2019",
+    "target": "ES2020",
     "useUnknownInCatchVariables": false
   },
   "include": [

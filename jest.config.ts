@@ -1,13 +1,16 @@
 import type { Config } from '@jest/types';
 
-// Sync object
 const config: Config.InitialOptions = {
-  rootDir: '.',
   preset: 'ts-jest',
+  // testEnvironment: 'jsdom',
+  testEnvironment: 'node',
   maxWorkers: 3,
-  // verbose: true,
-  // testPathIgnorePatterns: ["node_modules", "dist"],
-  testPathIgnorePatterns: ['dist'],
+  rootDir: '.',
+  listTests: true,
+  testPathIgnorePatterns: [
+    'node_modules',
+    'dist',
+  ],
   resetMocks: true,
   resetModules: true,
   globals: {
@@ -15,11 +18,7 @@ const config: Config.InitialOptions = {
       useESM: true,
     },
   },
-  // testEnvironment: 'jsdom',
-  testEnvironment: 'node',
   transform: {
-    // "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$":
-    //   "<rootDir>/src/jestFileTransformer.js",
   },
 };
 
