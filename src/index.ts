@@ -158,7 +158,7 @@ export default class PromisePool<TTaskResult, TError extends Error> {
     const task = this.inbox.shift();
     if (task) {
       // @ts-expect-error
-      task?.inboxIndex = resultIndex;
+      task.inboxIndex = resultIndex;
       return task;
     }
     return null;

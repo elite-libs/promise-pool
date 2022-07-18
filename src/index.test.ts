@@ -1,7 +1,7 @@
 import Pool from './index';
 
 describe('Pool: core', () => {
-  test.todo('can run a single task', async () => {
+  test('can run a single task', async () => {
     const pool = new Pool({
       maxWorkers: 1,
     });
