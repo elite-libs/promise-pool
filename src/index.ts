@@ -2,20 +2,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/lines-between-class-members */
 type TaskFunction<TResult> = (poolIndex: number) => Promise<TResult>;
-// type TaskMetadata = {
-//   taskIndex?: number;
-//   taskRuntime?: number;
-// };
 
-// type PromiseResult<TResult, TError extends Error> =
-//   | {
-//       status: 'fulfilled';
-//       value: TResult;
-//     }
-//   | {
-//       status: 'rejected';
-//       value: TError | unknown;
-//     };
 
 interface PoolConfig {
   maxWorkers: number;
@@ -53,11 +40,10 @@ function promiseTracer(
   return funcWrapper(taskFunction, inboxIndex, metadata);
 }
 
-// type TaskResult = ReturnType<ReturnType<typeof promiseTracer>>;
 /** Curried w/ poolIndex */
 type TaskCallbackResult = ReturnType<typeof promiseTracer>;
 
-type TaskWrappedResult = ReturnType<typeof funcWrapper>;
+// type TaskWrappedResult = ReturnType<typeof funcWrapper>;
 
 interface TaskResult {
   inboxIndex: number;
@@ -104,15 +90,6 @@ export default class PromisePool<TTaskResult, TError extends Error> {
     this.inbox.push(promiseTracer(task, this.inbox.length, metadata));
   }
 
-  // const taskIndex = this.inbox.indexOf(task);
-  // const taskRuntime = this.config.timestampCallback();
-  // const taskMetadata: TaskMetadata = { taskIndex, taskRuntime };
-  // const taskResult = await this.runTask(task, taskMetadata);
-  // this.results.set(task, taskResult);
-  // if (taskResult.status === 'fulfilled') {
-  //   return taskResult.value;
-  // }
-
   async done() {
     while (this.inbox.length <= this.config.maxWorkers) {
       const nextTask = this.getNextTask();
@@ -121,13 +98,6 @@ export default class PromisePool<TTaskResult, TError extends Error> {
     while (this.inbox.length > 0) {
       try {
         await this.runNextTask();
-        // if (taskResult !== null) {
-        //   if (!taskResult.isError) {
-        //     taskResult.result;
-        //   } else {
-        //     taskResult.reason;
-        //   }
-        // }
       } catch (error) {
         console.error('Error in PromisePool.done():', error);
       }
