@@ -1,6 +1,6 @@
 {
   "buildOptions": {
-    "incremental": true,
+    "incremental": true
   },
   "compilerOptions": {
     "allowJs": true,
@@ -8,16 +8,16 @@
     "allowSyntheticDefaultImports": true,
     "alwaysStrict": true,
     "importHelpers": true,
-    "baseUrl": ".",
+    // "baseUrl": ".",
     "declaration": true,
     "declarationMap": true,
     "incremental": true,
     "composite": true,
     "listEmittedFiles": true,
+    "listFiles": true,
     "noUncheckedIndexedAccess": false,
     "preserveConstEnums": true,
-    "tsBuildInfoFile": ".temp/.tsbuildinfo",
-    
+    "tsBuildInfoFile": ".temp/project.tsbuildinfo",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
@@ -38,24 +38,24 @@
     "sourceMap": true,
     "strict": true,
     "strictBindCallApply": true,
-    "diagnostics": true,
+    "diagnostics": false,
     "paths": {
       "@*": [
-        "src/*"
+        "./src/*"
       ]
     },
     "target": "ES2020",
     "useUnknownInCatchVariables": false
   },
   "include": [
-    "**/*.ts",
-    "**/*.js"
+    "src/**/*.ts",
+    "src/**/*.js"
   ],
   "exclude": [
     "__mocks__",
     "__snapshots__",
     // "**/*.test.js",
-    // "**/*.test.ts",
+    "**/*.test.ts",
     "dist",
     "node_modules",
   ]

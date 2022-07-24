@@ -2,13 +2,14 @@ import Pool from './index';
 
 describe('Pool: core', () => {
   test('can run a single task', async () => {
-    const pool = new Pool({
-      maxWorkers: 1,
-    });
+    const pool = new Pool();
     const task = jest.fn();
-
-    await pool.done();
+    const added = pool.add(task);
+    console.log({ added });
+    const p = pool.done();
+    console.log(pool._stats);
     expect(task).toHaveBeenCalledTimes(1);
+    return p;
   });
   test.todo('support high precision timestamps');
 

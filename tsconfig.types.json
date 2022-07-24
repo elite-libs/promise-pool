@@ -1,0 +1,33 @@
+{
+  "buildOptions": {
+    "incremental": false,
+  },
+  "compilerOptions": {
+    "declaration": true,
+    "declarationDir": "./dist",
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    // "noEmitOnError": true,
+    "incremental": false,
+    "composite": false,
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "sourceMap": true,
+    "strict": true,
+    "listEmittedFiles": true,
+    "rootDir": "./src",
+  },
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.js"
+  ],
+  "exclude": [
+    "./src/__mocks__",
+    "./src/__snapshots__",
+    "./**/*.test.ts",
+    "./dist",
+    "./node_modules",
+  ],
+}

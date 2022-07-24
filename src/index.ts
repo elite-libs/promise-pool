@@ -1,67 +1,41 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-/* eslint-disable @typescript-eslint/lines-between-class-members */
-type TaskFunction<TResult> = (poolIndex: number) => Promise<TResult>;
-
+import { unpackPromise } from './shared';
 
 interface PoolConfig {
   maxWorkers: number;
-  // results: 'ignore' | 'collect-all' | 'only-errors';
-
-  // errorLimit: number | false;
-  // retryLimit: number | false;
-  // retryBackoff: 'exponential' | 'linear';
-
-  // onTaskError?: <TPlaceholder, TError extends Error>(
-  //   error: TError,
-  //   task: TaskResult<TPlaceholder, TError> & TaskMetadata
-  // ) => void | Promise<unknown> | unknown;
-
-  // Instrumentation
+  backgroundRecheckInterval: number;
   /**
-   * Defaults to `Date.now()`
+   * `timestampCallback` defaults to `Date.now()`
    *
    * In node, get more accurate results with `process.hrtime()`
    *
    */
-  timestampCallback: () => number;
+  timestampCallback?: TimerCallback | null;
 }
 
-/**
- *
- * TODO: Document this subtle fanciness...
- *
- */
-function promiseTracer(
-  taskFunction: TaskFunction<TaskResult>,
-  inboxIndex: number,
-  ...metadata: unknown[]
-) {
-  return funcWrapper(taskFunction, inboxIndex, metadata);
-}
+type TimerType = number | bigint;
 
-/** Curried w/ poolIndex */
-type TaskCallbackResult = ReturnType<typeof promiseTracer>;
+type TimerCallback =
+  | (() => TimerType)
+  | (<TTimerType extends TimerType>(startTime?: TTimerType) => TTimerType);
 
-// type TaskWrappedResult = ReturnType<typeof funcWrapper>;
+type AsyncTask<TResult = unknown> = (() => Promise<TResult>) & {
+  metadata?: unknown;
+};
 
 interface TaskResult {
-  inboxIndex: number;
-  isError: undefined;
-  metadata: unknown[];
-  poolIndex: number;
-  result: any;
-  status: string;
-  taskRuntime: number;
+  index: number;
+  error?: Error;
+  result?: unknown;
+  status: 'pending' | 'resolved' | 'rejected';
+  runtime?: number | bigint;
 }
 
 /**
  * Worker pool for running tasks in parallel.
  *
  * - A light-weight 'side-channel' for holding and running async tasks.
- * - Excels with long running,
- * IO bound async.
- * - Reduces likelihood of run-away traffic load triggering failures
+ * - Excels with long running, IO-bound async.
+ * - Minimize traffic spikes. load triggering failures
  *    which cause their own secondary failures (see Failure Amplification Effect).
  *
  * Accepts tasks in the form of functions which enclose async work.
@@ -72,96 +46,165 @@ interface TaskResult {
  *
  */
 export default class PromisePool<TTaskResult, TError extends Error> {
-  config: Readonly<PoolConfig>;
+  config: Readonly<PoolConfig> = {
+    maxWorkers: 1,
+    timestampCallback: Date.now,
+    backgroundRecheckInterval: 5,
+  };
+  timestampCallback: TimerCallback;
 
-  private results: Array<Awaited<ReturnType<typeof this.runNextTask>>> = [];
-  inbox: ReturnType<typeof promiseTracer>[] = [];
-  dynamicPool: ReturnType<ReturnType<typeof promiseTracer>>[];
+  private pendingPromise: ReturnType<typeof unpackPromise> | null = null;
+  private currentTaskIndex = -1;
+  taskList: Array<AsyncTask | TaskResult> = [];
+  workPool: Array<Promise<unknown> | boolean | null> = [];
+  status: 'initialized' | 'running' | 'done' | 'canceled' = 'initialized';
+  get isDone() {
+    return this.status === 'done';
+  }
 
-  status: 'initialized' | 'running' | 'done' | 'cancelled' = 'initialized';
-  isDone = false;
+  get _stats() {
+    return {
+      taskList: this.taskList.length,
+      workPool: this.workPool.length,
 
-  enqueue(task: ReturnType<typeof promiseTracer>, metadata?: unknown): void {
+      processingTaskCount: this.processingTaskCount(),
+      isWorkPoolFullToEnd: this.isWorkPoolFullToEnd,
+      isDone: this.isDone,
+      status: this.status,
+
+      config: this.config,
+    };
+  }
+
+  add<TTaskType>(...tasks: AsyncTask<TTaskType>[]): number {
     if (this.isDone)
       throw new Error('Task Rejected! Pool finalized, done() called.');
-    if (!task || typeof task !== 'function')
+    if (!tasks || typeof tasks[0] !== 'function')
       throw new Error('Task Invalid! Task is not a function.');
 
-    this.inbox.push(promiseTracer(task, this.inbox.length, metadata));
+    this.taskList.push(...tasks);
+    return this.fillWorkPool();
   }
 
-  async done() {
-    while (this.inbox.length <= this.config.maxWorkers) {
-      const nextTask = this.getNextTask();
-      if (nextTask !== null) this.enqueue(nextTask);
-    }
-    while (this.inbox.length > 0) {
-      try {
-        await this.runNextTask();
-      } catch (error) {
-        console.error('Error in PromisePool.done():', error);
-      }
+  /** Used to manage a setInterval monitoring completion */
+  private _checkIfCompleteInterval?: NodeJS.Timer;
+
+  /**
+   * When true, the workPool is full, and _**MAY**_ have completed.
+   */
+  private get isWorkPoolFullToEnd() {
+    return this.workPool.length === this.taskList.length;
+  }
+
+  /**
+   * Check if the workPool is full, and if so wait for all tasks to resolve or reject.
+   */
+  private checkIfComplete() {
+    if (this.isWorkPoolFullToEnd) {
+      // Now we need to wait for the pool to finish (or verify it has finished)
+      Promise.allSettled(this.workPool)
+        .then(() => {
+          if (this.pendingPromise != null) {
+            this.pendingPromise.resolve(this.taskList);
+            this.status = 'done';
+            clearInterval(this._checkIfCompleteInterval);
+            this._checkIfCompleteInterval = undefined;
+          }
+        })
+        .catch(console.error);
     }
   }
 
-  // is
-  runNextTask() {
-    // Attach tracking indexes to easily replace tasks upon completion
-    this.dynamicPool.map((task, index) => {
-      (task as unknown as any).poolIndex = index;
-    });
-    // Unpack
-    return Promise.race(this.dynamicPool).then(
-      ({
-        result,
-        inboxIndex,
-        poolIndex,
-        status,
-        taskRuntime,
-        isError,
-        metadata,
-      }) => {
-        if (!Number.isFinite(poolIndex)) {
-          throw Error(
-            `Invalid value for the pool index/tracking position: ${poolIndex}`
-          );
-        }
-        const taskWrapper = this.getNextTask();
-
-        if (!taskWrapper) {
-          this.status = 'done';
-          throw Error('All tasks completed!');
-        }
-        this.dynamicPool[poolIndex] = taskWrapper?.(poolIndex)!;
-
-        const taskResult = {
-          result,
-          inboxIndex,
-          poolIndex,
-          status,
-          taskRuntime,
-          isError,
-          metadata,
-        };
-
-        if (this.results[inboxIndex])
-          throw Error('Unexpected duplicate index access:' + inboxIndex);
-
-        this.results[inboxIndex] = taskResult;
-        return taskResult;
-      }
+  done() {
+    if (this.pendingPromise != null) return this.pendingPromise.promise;
+    this.status = 'running';
+    this.pendingPromise = unpackPromise<TaskResult[]>();
+    this._checkIfCompleteInterval = setInterval(
+      this.checkIfComplete.bind(this),
+      this.config.backgroundRecheckInterval
     );
+    return this.pendingPromise.promise;
   }
 
-  getNextTask() {
-    const resultIndex = this.inbox.length;
-    const task = this.inbox.shift();
-    if (task) {
-      // @ts-expect-error
-      task.inboxIndex = resultIndex;
-      return task;
+  /**
+   * Fill the workPool with tasks.
+   * Called after adding tasks, only runs new tasks if needed.
+   *
+   * The `for` loop synchronously auto-sizes the worker pool,
+   *  under the `maxWorker` limit.
+   */
+  private fillWorkPool() {
+    let workCount = 0;
+    for (
+      let i = this.processingTaskCount();
+      i <= Math.min(this.taskList.length, this.config.maxWorkers) - 1;
+      i++
+    ) {
+      workCount++;
+      this.consumeNextTask();
     }
-    return null;
+    return workCount;
+  }
+
+  private processingTaskCount() {
+    return this.workPool.filter((task) => typeof task === 'object').length;
+  }
+
+  private consumeNextTask() {
+    if (this.processingTaskCount() >= this.config.maxWorkers) return null;
+
+    const localTaskIndex = ++this.currentTaskIndex;
+
+    const task = this.taskList[localTaskIndex];
+    if (typeof task === 'function') {
+      const startTime = this.timestampCallback();
+      this.workPool[localTaskIndex] = task();
+      const workItem = this.workPool[localTaskIndex];
+      if (workItem != null && typeof workItem === 'object') {
+        if (
+          typeof workItem['then'] === 'function' &&
+          typeof workItem['catch'] === 'function'
+        ) {
+          workItem
+            .then((result) => {
+              this.workPool[localTaskIndex] = true;
+              this.taskList[localTaskIndex] = {
+                index: localTaskIndex,
+                result,
+                status: 'resolved',
+                runtime: this.getOrCompareTimestamp(startTime),
+              };
+            })
+            .catch((error) => {
+              this.workPool[localTaskIndex] = false;
+              this.taskList[localTaskIndex] = {
+                index: localTaskIndex,
+                error,
+                status: 'rejected',
+                runtime: this.getOrCompareTimestamp(startTime),
+              };
+            })
+            .finally(() => this.consumeNextTask());
+        }
+      }
+    }
+    return false;
+  }
+
+  private getOrCompareTimestamp(timestamp?: TimerType) {
+    if (!this.config.timestampCallback) return undefined;
+    if (timestamp == null) return this.config.timestampCallback();
+    if (this.config.timestampCallback.length >= 1) {
+      return this.config.timestampCallback(timestamp);
+    } else {
+      const bigDiff =
+        BigInt(this.config.timestampCallback()) - BigInt(timestamp);
+      if (bigDiff < BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(bigDiff.toString());
+      } else {
+        return bigDiff;
+      }
+    }
   }
 
   constructor(config: Partial<PoolConfig> = defaultConfig()) {
@@ -169,50 +212,15 @@ export default class PromisePool<TTaskResult, TError extends Error> {
       ...defaultConfig(),
       ...config,
     });
-    this.dynamicPool = Array(this.config.maxWorkers);
+    this.timestampCallback =
+      this.config.timestampCallback || (() => Number.NaN);
   }
-}
-
-function funcWrapper(
-  taskFunction: TaskFunction<TaskResult>,
-  inboxIndex: number,
-  metadata: unknown[]
-) {
-  return async (poolIndex: number) => {
-    const start = Date.now();
-    const response: object = await taskFunction(poolIndex)
-      .then((result: unknown) => ({ result }))
-      .catch((error: Error) => ({
-        // These error details will be merged below with the task metadata
-        isError: true,
-        status: 'rejected',
-        message: error.message,
-        reason: error,
-      }));
-    const end = Date.now();
-
-    return {
-      isError: undefined,
-      status: 'resolved',
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      // @ts-expect-error
-      result: response?.result,
-      ...response,
-      taskRuntime: end - start,
-      inboxIndex,
-      poolIndex,
-      metadata,
-    };
-  };
 }
 
 function defaultConfig(): PoolConfig {
   return {
     maxWorkers: 4,
-    // results: 'collect-all',
-    // errorLimit: false,
-    // retryLimit: false,
-    // retryBackoff: 'exponential',
+    backgroundRecheckInterval: 5,
     timestampCallback: () => Date.now(),
   };
 }

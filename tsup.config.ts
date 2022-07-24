@@ -6,7 +6,7 @@ const env: 'production' | 'development' =
   process.env.NODE_ENV === 'production' ? 'production' : 'development';
 const isProd = env === 'production';
 
-const singleBundleFile = process.env.BUNDLE_ALL != null;
+const singleBundleFile = Boolean(process.env.BUNDLE_ALL);
 
 export default {
   format,
@@ -17,11 +17,11 @@ export default {
   globalName: 'PromisePool',
   clean: true,
   bundle: true,
-  dts: true,
+  dts: false,
   metafile: true,
   minify: isProd,
-  skipNodeModulesBundle: singleBundleFile,
+  // skipNodeModulesBundle: singleBundleFile,
+  splitting: true,
   sourcemap: true,
-  // splitting: false,//
-  noExternal: [/lodash\/.*/, 'ms', /expressionparser\/.*/],
+  noExternal: [/lodash\/.*/, 'ms'],
 } as Options;

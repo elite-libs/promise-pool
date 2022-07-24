@@ -1,15 +1,46 @@
 # Promise Pool
 
-A modern task queue built with generators, atomics, shared array buffers, and `Promise.allSettled`.
+A background task processor built with several key features for reliability and scalability.
 
 ## Features
 
-- [ ] Configurable:
-  - [ ] Concurrency limit.
-  - [ ] Retries.
-  - [ ] Progress.
-  - [ ] Error handling.
+- [ ] Configurable.
+- [x] Concurrency limit.
+- [ ] Retries.
+- [ ] Progress.
+- [ ] Error handling.
+- [ ] Task scheduling & prioritization.
+  - [ ] optional `return` hints. (To support API's like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
 
+<!--
+## Config Options
+
+```ts
+interface PoolConfig {
+  maxWorkers: number;
+  backgroundRecheckInterval: number;
+  // results: 'ignore' | 'collect-all' | 'only-errors';
+  // errorLimit: number | false;
+  // retryLimit: number | false;
+  // retryBackoff: 'exponential' | 'linear';
+
+  // onTaskError?: <TPlaceholder, TError extends Error>(
+  //   error: TError,
+  //   task: TaskResult<TPlaceholder, TError> & TaskMetadata
+  // ) => void | Promise<unknown> | unknown;
+
+  // Instrumentation
+  /**
+   * `timestampCallback` defaults to `Date.now()`
+   *
+   * In node, get more accurate results with `process.hrtime()`
+   *
+   */
+  timestampCallback?: TimerCallback | null;
+}
+```
+
+-->
 <!-- # Naming & Abbreviation Ideas 
 
 | Abbrev. | Name |
@@ -17,8 +48,8 @@ A modern task queue built with generators, atomics, shared array buffers, and `P
 | ASS Pool | **Async Streaming Service Pool** (though I think Hard Rock Hotel snagged this a while ago...) |
 | TAR Pool | **Throttled Async Recursive Pool**  |
 | AASS Pool  | **Async, Await, Streaming Service Pool** |
-| SCAM | **Streaming coordinated, async manager** (SPARC coulda had more fun with their acronym soup) |
-| SQAM | **Streamed queue, async manager** (SPARC did a cop-out, avoiding going with harder scrabble letter QQ) |
+| SCAM | **Streaming coordinated, async manager** |
+| SQAM | **Streamed queue, async manager** |
 | SMAQ | **Streaming managed, async queue** |
 | SPAQ | **Streamed processing, async queue** |
 | SPANQ | **Streamed processing, async natural queue** |
