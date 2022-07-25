@@ -1,16 +1,53 @@
 # Promise Pool
 
-A background task processor built with several key features for reliability and scalability.
+[![CI Status](https://github.com/elite-libs/promise-pool/workflows/test/badge.svg)](https://github.com/elite-libs/promise-pool/actions)
+[![NPM version](https://img.shields.io/npm/v/@elite-libs/promise-pool.svg)](https://www.npmjs.com/package/@elite-libs/promise-pool)
+[![GitHub stars](https://img.shields.io/github/stars/elite-libs/promise-pool.svg?style=social)](https://github.com/elite-libs/promise-pool)
+
+A background task processor focused on reliability and scalability.
 
 ## Features
 
-- [ ] Configurable.
+- [x] Configurable.
 - [x] Concurrency limit.
-- [ ] Retries.
-- [ ] Progress.
-- [ ] Error handling.
-- [ ] Task scheduling & prioritization.
-  - [ ] optional `return` hints. (To support API's like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
+- [x] Retries. (Use `p-retry` for this.)
+- [x] Zero dependencies.
+<!-- - [x] ~~Progress events.~~ -->
+- [x] Error handling.
+- [ ] Singleton mode: Option to Auto-reset when `.done()`.
+- [x] Task scheduling & prioritization.
+  - [x] Optionally `return` hints. (To support API's like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
+
+## Usage
+
+`PromisePool` exposes 2 methods: `.add(...tasks)` and `.done()`. This is to make it easy to implement & operate.
+Tasks added to the pool will begin executing immediately, with a concurrency limit as configured (default of `4`).
+
+### Install
+  
+```sh
+# with npm
+npm install @elite-libs/promise-pool
+# or using yarn
+yarn add @elite-libs/promise-pool
+```
+
+### Example
+
+```typescript
+import PromisePool from '@elite-libs/promise-pool';
+// 1/3: Either use the default instance or create a new one.
+const pool = new PromisePool();
+
+// 2/3: Add task(s) to the pool as needed.
+// PromisePool will execute them in parallel as soon as possible.
+pool.add(() => saveToS3(data));
+pool.add(() => expensiveBackgroundWork(data));
+
+// 3/3: REQUIRED: in order to ensure your tasks are executed, 
+// you must call `await pool.done()` at the end of your script.
+await pool.done();
+```
 
 <!--
 ## Config Options

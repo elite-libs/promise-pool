@@ -1,6 +1,6 @@
 import { unpackPromise } from './shared';
 
-interface PoolConfig {
+export interface PoolConfig {
   maxWorkers: number;
   backgroundRecheckInterval: number;
   /**
@@ -18,9 +18,7 @@ type TimerCallback =
   | (() => TimerType)
   | (<TTimerType extends TimerType>(startTime?: TTimerType) => TTimerType);
 
-type AsyncTask<TResult = unknown> = (() => Promise<TResult>) & {
-  metadata?: unknown;
-};
+type AsyncTask<TResult = unknown> = (() => Promise<TResult>);
 
 type TaskResult = {
   index: number;
@@ -55,7 +53,7 @@ type TaskResult = {
  *  the task inbox will run until complete.
  *
  */
-export default class PromisePool {
+class PromisePool {
   config: Readonly<PoolConfig> = {
     maxWorkers: 1,
     timestampCallback: Date.now,
@@ -258,3 +256,6 @@ function defaultConfig(): PoolConfig {
     timestampCallback: () => Date.now(),
   };
 }
+
+export default PromisePool;
+export { PromisePool };
