@@ -26,7 +26,8 @@
       "ESNext.AsyncIterable",
       "ESNext.Promise",
       "ES2015.Collection",
-      "ES2018.AsyncGenerator"
+      "ES2018.AsyncGenerator",
+      "ES2021.Promise",
     ],
     "module": "esnext",
     "moduleResolution": "node",
@@ -44,7 +45,7 @@
         "./src/*"
       ]
     },
-    "target": "ES2020",
+    "target": "ESNext",
     "useUnknownInCatchVariables": false
   },
   "include": [
@@ -55,7 +56,7 @@
     "__mocks__",
     "__snapshots__",
     // "**/*.test.js",
-    "**/*.test.ts",
+    // "**/*.test.ts",
     "dist",
     "node_modules",
   ]

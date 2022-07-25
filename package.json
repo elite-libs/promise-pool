@@ -25,7 +25,7 @@
     "prepublishOnly": "NODE_ENV=production  npm run build",
     "release:npm": "npm publish --access public --registry https://registry.npmjs.org/",
     "release:github": "npm publish --access public --registry https://npm.pkg.github.com/",
-    "test": "npm run build && jest",
+    "test": "npm run build && jest --detectOpenHandles --runInBand --forceExit",
     "test:coverage": "npm run build && jest --coverage",
     "build": "npx rimraf ./dist/* && npm run build:bundle && npm run build:types",
     "build:types": "npx tsc --project ./tsconfig.types.json",

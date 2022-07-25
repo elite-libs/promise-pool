@@ -22,13 +22,23 @@ type AsyncTask<TResult = unknown> = (() => Promise<TResult>) & {
   metadata?: unknown;
 };
 
-interface TaskResult {
+type TaskResult = {
   index: number;
-  error?: Error;
-  result?: unknown;
-  status: 'pending' | 'resolved' | 'rejected';
+  // | 'resolved' | 'rejected';
   runtime?: number | bigint;
-}
+} & (
+  | {
+      status: 'pending';
+    }
+  | {
+      status: 'rejected';
+      error?: Error;
+    }
+  | {
+      status: 'resolved';
+      result?: unknown;
+    }
+);
 
 /**
  * Worker pool for running tasks in parallel.
@@ -67,6 +77,8 @@ export default class PromisePool<TTaskResult, TError extends Error> {
       taskList: this.taskList.length,
       workPool: this.workPool.length,
 
+      currentTaskIndex: this.currentTaskIndex,
+
       processingTaskCount: this.processingTaskCount(),
       isWorkPoolFullToEnd: this.isWorkPoolFullToEnd,
       isDone: this.isDone,
@@ -100,6 +112,7 @@ export default class PromisePool<TTaskResult, TError extends Error> {
    * Check if the workPool is full, and if so wait for all tasks to resolve or reject.
    */
   private checkIfComplete() {
+    console.log('checkIfComplete._stats', this._stats);
     if (this.isWorkPoolFullToEnd) {
       // Now we need to wait for the pool to finish (or verify it has finished)
       Promise.allSettled(this.workPool)
@@ -152,8 +165,8 @@ export default class PromisePool<TTaskResult, TError extends Error> {
 
   private consumeNextTask() {
     if (this.processingTaskCount() >= this.config.maxWorkers) return null;
-
-    const localTaskIndex = ++this.currentTaskIndex;
+    this.currentTaskIndex = this.currentTaskIndex++;
+    const localTaskIndex = this.currentTaskIndex;
 
     const task = this.taskList[localTaskIndex];
     if (typeof task === 'function') {
@@ -185,7 +198,15 @@ export default class PromisePool<TTaskResult, TError extends Error> {
               };
             })
             .finally(() => this.consumeNextTask());
+        } else {
+          console.error(
+            `Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`
+          );
         }
+      } else {
+        console.error(
+          `Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`
+        );
       }
     }
     return false;
