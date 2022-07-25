@@ -64,6 +64,21 @@ describe('Pool: core', () => {
     return pool.done();
   });
 
+  test('can use simple timestamp function w/ BigInt', async () => {
+    let timeStampCount = 0n;
+    const getBigTimestamp = () => {
+      timeStampCount ++;
+      const time = BigInt(Number.MAX_SAFE_INTEGER) + BigInt(1_000_000);
+      return time * timeStampCount;
+    };
+    const pool = new Pool({
+      timestampCallback: getBigTimestamp,
+    });
+    const task = jest.fn(() => Promise.resolve(420));
+    pool.add(task);
+    return pool.done();
+  });
+
   test('can disable runtime stats', async () => {
     const pool = new Pool({
       timestampCallback: null,

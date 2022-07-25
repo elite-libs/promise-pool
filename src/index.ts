@@ -91,10 +91,6 @@ export default class PromisePool {
       isDone: this.isDone,
       status: this.status,
 
-      // taskList: this.taskList,
-
-      statusReport: this.taskListStats(),
-
       config: this.config,
     };
   }
@@ -113,9 +109,7 @@ export default class PromisePool {
    * When true, the workPool is full, and _**MAY**_ have completed.
    */
   private get isWorkPoolFullToEnd() {
-    const isLastTask = this.currentTaskIndex >= this.taskList.length - 1;
-    // console.log({isLastTask});
-    return isLastTask;
+    return this.currentTaskIndex >= this.taskList.length - 1;
   }
 
   /**
@@ -178,18 +172,8 @@ export default class PromisePool {
     return this.workPool.filter((task) => typeof task === 'object').length;
   }
 
-  private taskListStats = () => {
-    return this.taskList.reduce((groups, task) => {
-      if (typeof task !== 'function') {
-        groups[task.status] ||= [];
-        groups[task.status].push(task);
-      }
-      return groups;
-    }, {} as Record<TaskResult['status'], Array<AsyncTask | TaskResult>>);
-  }
-
   private consumeNextTask = () => {
-    if (this.processingTaskCount() >= this.config.maxWorkers) return null;
+    // if (this.processingTaskCount() >= this.config.maxWorkers) return null;
     
     ++this.currentTaskIndex;
     if (this.currentTaskIndex >= this.taskList.length) return true;
