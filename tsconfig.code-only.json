@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "buildOptions": {
+  },
+  "compilerOptions": {
+    "rootDir": "./src",
+  },
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.js"
+  ],
+  "exclude": [
+    "__mocks__",
+    "__snapshots__",
+    // "**/*.test.js",
+    // "**/*.test.ts",
+    "dist",
+    "node_modules",
+    "tsup.config.ts"
+  ]
+}

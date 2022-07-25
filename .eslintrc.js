@@ -16,22 +16,12 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 'es2021',
     sourceType: 'module',
-    project: './tsconfig.dev.json',
+    project: './tsconfig.code-only.json',
   },
   plugins: ['@typescript-eslint'],
   rules: {
-    // 'max-len': [
-    //   'error',
-    //   {
-    //     code: 80,
-    //     tabWidth: 2,
-    //     ignoreUrls: true,
-    //     ignoreRegExpLiterals: true,
-    //     ignoreTemplateLiterals: true,
-    //     ignoreComments: true,
-    //     ignoreTrailingComments: true,
-    //   },
-    // ],
+    'no-console': 'off',
+    '@typescript-eslint/no-redeclare': 'off',
     'array-bracket-newline': [
       'error',
       {
@@ -94,18 +84,10 @@ module.exports = {
     //     next: ['const', 'let', 'var'],
     //   },
     // ],
-    'no-use-before-define': [
-      'error',
-      {
-        allowNamedExports: false,
-        classes: true,
-        functions: false,
-        variables: false,
-      },
-    ],
+    'no-use-before-define': 'off',
     '@typescript-eslint/no-use-before-define': 'off',
     '@typescript-eslint/no-misused-new': 'error',
-    '@typescript-eslint/no-inferrable-types': 'error',
+    '@typescript-eslint/no-inferrable-types': 'warn',
     '@typescript-eslint/member-delimiter-style': [
       'error',
       {
@@ -120,6 +102,7 @@ module.exports = {
         multilineDetection: 'brackets',
       },
     ],
+    'import/prefer-default-export': 'off',
     // consistent-type-imports
     '@typescript-eslint/consistent-type-imports': [
       'error',
@@ -144,6 +127,7 @@ module.exports = {
       },
     ],
 
+    'no-underscore-dangle': 'off',
     // Promise & async checks
     '@typescript-eslint/await-thenable': 'off',
     '@typescript-eslint/no-floating-promises': [

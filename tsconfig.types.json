@@ -7,7 +7,6 @@
     "declarationDir": "./dist",
     "declarationMap": true,
     "emitDeclarationOnly": true,
-    // "noEmitOnError": true,
     "incremental": false,
     "composite": false,
     "target": "es2020",

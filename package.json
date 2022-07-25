@@ -30,6 +30,7 @@
     "build": "npx rimraf ./dist/* && npm run build:bundle && npm run build:types",
     "build:types": "npx tsc --project ./tsconfig.types.json",
     "build:bundle": "npx tsup && cp dist/index.js dist/index.cjs",
+    "lint": "eslint .",
     "format": "eslint --fix ."
   },
   "author": {

@@ -26,16 +26,16 @@ type TaskResult = {
   runtime?: number | bigint;
 } & (
   | {
-      status: 'pending';
-    }
+    status: 'pending';
+  }
   | {
-      status: 'rejected';
-      error?: Error;
-    }
+    status: 'rejected';
+    error?: Error;
+  }
   | {
-      status: 'resolved';
-      result?: unknown;
-    }
+    status: 'resolved';
+    result?: unknown;
+  }
 );
 
 /**
@@ -59,18 +59,24 @@ class PromisePool {
     timestampCallback: Date.now,
     backgroundRecheckInterval: 5,
   };
+
   timestampCallback: TimerCallback;
 
-  private _backgroundIntervalPromise: ReturnType<typeof unpackPromise> | null = null;
+  private _backgroundIntervalPromise: ReturnType<typeof unpackPromise<TaskResult[]>> | null = null;
+
   private currentTaskIndex = -1;
+
   taskList: Array<AsyncTask | TaskResult> = [];
+
   workPool: Array<Promise<unknown> | boolean | null> = [];
+
   status: 'initialized' | 'running' | 'done' | 'canceled' = 'initialized';
 
   private _completionPromise?: Promise<void>;
 
   /** Used to manage a setInterval monitoring completion */
   private _checkIfCompleteInterval?: NodeJS.Timer;
+
   private _errors: Array<Error> = [];
 
   get isDone() {
@@ -94,14 +100,12 @@ class PromisePool {
   }
 
   add = <TTaskType>(...tasks: AsyncTask<TTaskType>[]): number => {
-    if (this.isDone)
-      throw new Error('Task Rejected! Pool finalized, done() called.');
-    if (!tasks || !tasks.every(task => typeof task === 'function'))
-      throw new Error('Task Invalid! Task is not a function.');
+    if (this.isDone) throw new Error('Task Rejected! Pool finalized, done() called.');
+    if (!tasks || !tasks.every((task) => typeof task === 'function')) throw new Error('Task Invalid! Task is not a function.');
 
     this.taskList.push(...tasks);
     return this.fillWorkPool();
-  }
+  };
 
   /**
    * When true, the workPool is full, and _**MAY**_ have completed.
@@ -120,7 +124,7 @@ class PromisePool {
       this._completionPromise = Promise.allSettled(this.workPool)
         .then(() => {
           if (this._backgroundIntervalPromise != null) {
-            this._backgroundIntervalPromise.resolve(this.taskList);
+            this._backgroundIntervalPromise.resolve(this.getCompletedTasks());
             this.status = 'done';
             clearInterval(this._checkIfCompleteInterval);
             this._checkIfCompleteInterval = undefined;
@@ -129,22 +133,19 @@ class PromisePool {
         // TODO: add configurable error handler
         .catch(console.error);
     }
-  }
+  };
 
   done = () => {
     if (this._backgroundIntervalPromise != null) return this._backgroundIntervalPromise.promise;
     if (this._errors.length > 0) {
-      console.error(`Promise Pool failed! ${this._errors.length} errors occurred.`, this._stats);
-      return Promise.reject(new Error(`Promise Pool failed! ${this._errors.length} errors occurred.`));
+      return Promise.reject(new Error(`Promise Pool failed! ${this._errors.length} errors occurred. ${JSON.stringify(this._stats)}`));
     }
     this.status = 'running';
     this._backgroundIntervalPromise = unpackPromise<TaskResult[]>();
-    this._checkIfCompleteInterval ||= setInterval(
-      this.checkIfComplete.bind(this),
-      this.config.backgroundRecheckInterval
-    );
+    this._checkIfCompleteInterval ||= setInterval(this.checkIfComplete.bind(this),
+      this.config.backgroundRecheckInterval);
     return this._backgroundIntervalPromise.promise;
-  }
+  };
 
   /**
    * Fill the workPool with tasks.
@@ -158,22 +159,22 @@ class PromisePool {
     for (
       let i = this.processingTaskCount();
       i <= Math.min(this.taskList.length, this.config.maxWorkers) - 1;
-      i++
+      i += 1
     ) {
-      workCount++;
+      workCount += 1;
       this.consumeNextTask();
     }
     return workCount;
-  }
+  };
 
-  private processingTaskCount = () => {
-    return this.workPool.filter((task) => typeof task === 'object').length;
-  }
+  private processingTaskCount = () => this.workPool.filter((task) => typeof task === 'object').length;
+
+  private getCompletedTasks = (): TaskResult[] => this.taskList.filter((task) => typeof task === 'object' && task.status) as TaskResult[];
 
   private consumeNextTask = () => {
     // if (this.processingTaskCount() >= this.config.maxWorkers) return null;
-    
-    ++this.currentTaskIndex;
+
+    this.currentTaskIndex += 1;
     if (this.currentTaskIndex >= this.taskList.length) return true;
     const localTaskIndex = this.currentTaskIndex;
 
@@ -184,8 +185,8 @@ class PromisePool {
       const workItem = this.workPool[localTaskIndex];
       if (workItem != null && typeof workItem === 'object') {
         if (
-          typeof workItem['then'] === 'function' &&
-          typeof workItem['catch'] === 'function'
+          typeof workItem.then === 'function'
+          && typeof workItem.catch === 'function'
         ) {
           workItem
             .then((result) => {
@@ -197,7 +198,7 @@ class PromisePool {
                 runtime: this.getOrCompareTimestamp(startTime),
               };
             })
-            .catch((error) => {
+            .catch((error: Error) => {
               this.workPool[localTaskIndex] = false;
               this.taskList[localTaskIndex] = {
                 index: localTaskIndex,
@@ -208,44 +209,36 @@ class PromisePool {
             })
             .finally(() => this.consumeNextTask());
         } else {
-          const error = new Error(
-            `Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`
-          );
+          const error = new Error(`Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`);
           this._errors.push(error);
         }
       } else {
-        const error = new Error(
-          `Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`
-        );
+        const error = new Error(`Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`);
         this._errors.push(error);
       }
     }
     return false;
-  }
+  };
 
   private getOrCompareTimestamp = (timestamp?: TimerType) => {
     if (!this.config.timestampCallback) return undefined;
     // if (timestamp == null) return this.config.timestampCallback();
     if (this.config.timestampCallback.length >= 1) {
       return this.config.timestampCallback(timestamp);
-    } else {
-      const bigDiff =
-        BigInt(this.config.timestampCallback()) - BigInt(timestamp!);
-      if (bigDiff < BigInt(Number.MAX_SAFE_INTEGER)) {
-        return Number(bigDiff.toString());
-      } else {
-        return bigDiff;
-      }
     }
-  }
+    const bigDiff = BigInt(this.config.timestampCallback()) - BigInt(timestamp!);
+    if (bigDiff < BigInt(Number.MAX_SAFE_INTEGER)) {
+      return Number(bigDiff.toString());
+    }
+    return bigDiff;
+  };
 
   constructor(config: Partial<PoolConfig> = defaultConfig()) {
     this.config = Object.freeze({
       ...defaultConfig(),
       ...config,
     });
-    this.timestampCallback =
-      this.config.timestampCallback || (() => Number.NaN);
+    this.timestampCallback = this.config.timestampCallback || (() => Number.NaN);
   }
 }
 

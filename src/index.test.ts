@@ -67,7 +67,7 @@ describe('Pool: core', () => {
   test('can use simple timestamp function w/ BigInt', async () => {
     let timeStampCount = 0n;
     const getBigTimestamp = () => {
-      timeStampCount ++;
+      timeStampCount++;
       const time = BigInt(Number.MAX_SAFE_INTEGER) + BigInt(1_000_000);
       return time * timeStampCount;
     };
@@ -101,27 +101,28 @@ describe('Pool: core', () => {
 
   test('can handle calling .add() multiple times', async () => {
     const pool = new Pool();
-    Array.from({ length: 10 }, () =>
-      jest.fn(() => Promise.resolve(420))
-    ).forEach((task) => pool.add(task));
-    return await pool.done();
+    Array.from({
+      length: 10,
+    }, () => jest.fn(() => Promise.resolve(420))).forEach((task) => pool.add(task));
+    return pool.done();
   });
 
   test('can handle calling .add() w/ 10 items multiple times', async () => {
     const pool = new Pool();
-    const taskList = Array.from({ length: 10 }, () =>
-      jest.fn(() => Promise.resolve(420))
-    );
+    const taskList = Array.from({
+      length: 10,
+    }, () => jest.fn(() => Promise.resolve(420)));
     pool.add(...taskList);
     pool.add(...taskList);
-    return await pool.done();
+    return pool.done();
   });
 
   test('can error on invalid tasks (non-async)', async () => {
     const pool = new Pool();
-    const tasks = [jest.fn(() => 420), jest.fn(() => Error('an error'))];
-    // expect(() => pool.add(...tasks)).toThrowError();
-    
+    const tasks = [
+      jest.fn(() => 420),
+      jest.fn(() => Error('an error')),
+    ];
     // @ts-expect-error
     expect(pool.add(...tasks)).toBe(2);
     await expect(pool.done()).rejects.toThrowError();
@@ -131,11 +132,13 @@ describe('Pool: core', () => {
 
   test('can error on invalid tasks (non-function)', async () => {
     const pool = new Pool();
-    const tasks = [undefined, 420, Error('an error')];
+    const tasks = [
+      undefined,
+      420,
+      Error('an error'),
+    ];
     // @ts-expect-error
-    expect(() => pool.add(...tasks)).toThrowError(
-      'Task Invalid! Task is not a function.'
-    );
+    expect(() => pool.add(...tasks)).toThrowError('Task Invalid! Task is not a function.');
     const p = await pool.done();
     return p;
   });
@@ -143,15 +146,13 @@ describe('Pool: core', () => {
   test('can run multiple tasks', async () => {
     const maxLimit = 4; // Default is currently 4
     const pool = new Pool();
-    const taskList = Array.from({ length: 10 }, (_, index) =>
-      jest.fn(() => Promise.resolve(index))
-    );
+    const taskList = Array.from({
+      length: 10,
+    }, (_, index) => jest.fn(() => Promise.resolve(index)));
     const processingCount = pool.add(...taskList);
-    // console.log({ processingCount });
     const p = pool.done();
     expect(processingCount).toBe(maxLimit);
     expect(taskList[0]).toHaveBeenCalledTimes(1);
-    // console.log(pool._stats);
     await p;
     expect(taskList[9]).toHaveBeenCalledTimes(1);
     return p;
@@ -160,9 +161,9 @@ describe('Pool: core', () => {
   test('can run multiple async tasks', async () => {
     const maxLimit = 4; // Default is currently 4
     const pool = new Pool();
-    const taskList = Array.from({ length: 10 }, (_, index) =>
-      jest.fn(() => Promise.resolve(index))
-    );
+    const taskList = Array.from({
+      length: 10,
+    }, (_, index) => jest.fn(() => Promise.resolve(index)));
     const processingCount = pool.add(...taskList);
     // console.log({ processingCount });
     const p = pool.done();

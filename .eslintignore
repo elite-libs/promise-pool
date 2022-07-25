@@ -1,0 +1,6 @@
+tsup.config.ts
+dist
+coverage
+.eslintrc.js
+*.test.ts
+*.config.ts

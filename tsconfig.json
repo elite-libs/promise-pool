@@ -59,5 +59,6 @@
     // "**/*.test.ts",
     "dist",
     "node_modules",
+    "**/tsup.config.ts"
   ]
 }
