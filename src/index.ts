@@ -73,6 +73,7 @@ export default class PromisePool {
 
   /** Used to manage a setInterval monitoring completion */
   private _checkIfCompleteInterval?: NodeJS.Timer;
+  private _errors: Array<Error> = [];
 
   get isDone() {
     return this.status === 'done';
@@ -122,8 +123,7 @@ export default class PromisePool {
    */
   private checkIfComplete = () => {
     // console.log('checkIfComplete._stats', this._stats);
-    if (this._completionPromise) return this._completionPromise;
-    if (this.isWorkPoolFullToEnd) {
+    if (this.isWorkPoolFullToEnd && !this._completionPromise) {
       // Now we need to wait for the pool to finish (or verify it has finished)
       this._completionPromise = Promise.allSettled(this.workPool)
         .then(() => {
@@ -141,6 +141,10 @@ export default class PromisePool {
 
   done = () => {
     if (this._backgroundIntervalPromise != null) return this._backgroundIntervalPromise.promise;
+    if (this._errors.length > 0) {
+      console.error(`Promise Pool failed! ${this._errors.length} errors occurred.`, this._stats);
+      return Promise.reject(new Error(`Promise Pool failed! ${this._errors.length} errors occurred.`));
+    }
     this.status = 'running';
     this._backgroundIntervalPromise = unpackPromise<TaskResult[]>();
     this._checkIfCompleteInterval ||= setInterval(
@@ -222,29 +226,29 @@ export default class PromisePool {
             })
             .finally(() => this.consumeNextTask());
         } else {
-          console.error(
+          const error = new Error(
             `Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`
           );
+          this._errors.push(error);
         }
       } else {
-        console.error(
+        const error = new Error(
           `Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`
         );
+        this._errors.push(error);
       }
-    } else {
-      console.error(`Invalid Task! Task #${localTaskIndex} must be a function.`, {task, localTaskIndex, currentTaskIndex: this.currentTaskIndex, taskLength: this.taskList.length});
     }
     return false;
   }
 
   private getOrCompareTimestamp = (timestamp?: TimerType) => {
     if (!this.config.timestampCallback) return undefined;
-    if (timestamp == null) return this.config.timestampCallback();
+    // if (timestamp == null) return this.config.timestampCallback();
     if (this.config.timestampCallback.length >= 1) {
       return this.config.timestampCallback(timestamp);
     } else {
       const bigDiff =
-        BigInt(this.config.timestampCallback()) - BigInt(timestamp);
+        BigInt(this.config.timestampCallback()) - BigInt(timestamp!);
       if (bigDiff < BigInt(Number.MAX_SAFE_INTEGER)) {
         return Number(bigDiff.toString());
       } else {
