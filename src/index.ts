@@ -55,7 +55,7 @@ type TaskResult = {
  *  the task inbox will run until complete.
  *
  */
-export default class PromisePool<TTaskResult, TError extends Error> {
+export default class PromisePool {
   config: Readonly<PoolConfig> = {
     maxWorkers: 1,
     timestampCallback: Date.now,
@@ -63,19 +63,25 @@ export default class PromisePool<TTaskResult, TError extends Error> {
   };
   timestampCallback: TimerCallback;
 
-  private pendingPromise: ReturnType<typeof unpackPromise> | null = null;
+  private _backgroundIntervalPromise: ReturnType<typeof unpackPromise> | null = null;
   private currentTaskIndex = -1;
   taskList: Array<AsyncTask | TaskResult> = [];
   workPool: Array<Promise<unknown> | boolean | null> = [];
   status: 'initialized' | 'running' | 'done' | 'canceled' = 'initialized';
+
+  private _completionPromise?: Promise<void>;
+
+  /** Used to manage a setInterval monitoring completion */
+  private _checkIfCompleteInterval?: NodeJS.Timer;
+
   get isDone() {
     return this.status === 'done';
   }
 
   get _stats() {
     return {
-      taskList: this.taskList.length,
-      workPool: this.workPool.length,
+      taskListSize: this.taskList.length,
+      workPoolSize: this.workPool.length,
 
       currentTaskIndex: this.currentTaskIndex,
 
@@ -84,59 +90,64 @@ export default class PromisePool<TTaskResult, TError extends Error> {
       isDone: this.isDone,
       status: this.status,
 
+      // taskList: this.taskList,
+
+      statusReport: this.taskListStats(),
+
       config: this.config,
     };
   }
 
-  add<TTaskType>(...tasks: AsyncTask<TTaskType>[]): number {
+  add = <TTaskType>(...tasks: AsyncTask<TTaskType>[]): number => {
     if (this.isDone)
       throw new Error('Task Rejected! Pool finalized, done() called.');
-    if (!tasks || typeof tasks[0] !== 'function')
+    if (!tasks || !tasks.every(task => typeof task === 'function'))
       throw new Error('Task Invalid! Task is not a function.');
 
     this.taskList.push(...tasks);
     return this.fillWorkPool();
   }
 
-  /** Used to manage a setInterval monitoring completion */
-  private _checkIfCompleteInterval?: NodeJS.Timer;
-
   /**
    * When true, the workPool is full, and _**MAY**_ have completed.
    */
   private get isWorkPoolFullToEnd() {
-    return this.workPool.length === this.taskList.length;
+    const isLastTask = this.currentTaskIndex >= this.taskList.length - 1;
+    // console.log({isLastTask});
+    return isLastTask;
   }
 
   /**
    * Check if the workPool is full, and if so wait for all tasks to resolve or reject.
    */
-  private checkIfComplete() {
-    console.log('checkIfComplete._stats', this._stats);
+  private checkIfComplete = () => {
+    // console.log('checkIfComplete._stats', this._stats);
+    if (this._completionPromise) return this._completionPromise;
     if (this.isWorkPoolFullToEnd) {
       // Now we need to wait for the pool to finish (or verify it has finished)
-      Promise.allSettled(this.workPool)
+      this._completionPromise = Promise.allSettled(this.workPool)
         .then(() => {
-          if (this.pendingPromise != null) {
-            this.pendingPromise.resolve(this.taskList);
+          if (this._backgroundIntervalPromise != null) {
+            this._backgroundIntervalPromise.resolve(this.taskList);
             this.status = 'done';
             clearInterval(this._checkIfCompleteInterval);
             this._checkIfCompleteInterval = undefined;
           }
         })
+        // TODO: add configurable error handler
         .catch(console.error);
     }
   }
 
-  done() {
-    if (this.pendingPromise != null) return this.pendingPromise.promise;
+  done = () => {
+    if (this._backgroundIntervalPromise != null) return this._backgroundIntervalPromise.promise;
     this.status = 'running';
-    this.pendingPromise = unpackPromise<TaskResult[]>();
-    this._checkIfCompleteInterval = setInterval(
+    this._backgroundIntervalPromise = unpackPromise<TaskResult[]>();
+    this._checkIfCompleteInterval ||= setInterval(
       this.checkIfComplete.bind(this),
       this.config.backgroundRecheckInterval
     );
-    return this.pendingPromise.promise;
+    return this._backgroundIntervalPromise.promise;
   }
 
   /**
@@ -146,7 +157,7 @@ export default class PromisePool<TTaskResult, TError extends Error> {
    * The `for` loop synchronously auto-sizes the worker pool,
    *  under the `maxWorker` limit.
    */
-  private fillWorkPool() {
+  private fillWorkPool = () => {
     let workCount = 0;
     for (
       let i = this.processingTaskCount();
@@ -159,13 +170,25 @@ export default class PromisePool<TTaskResult, TError extends Error> {
     return workCount;
   }
 
-  private processingTaskCount() {
+  private processingTaskCount = () => {
     return this.workPool.filter((task) => typeof task === 'object').length;
   }
 
-  private consumeNextTask() {
+  private taskListStats = () => {
+    return this.taskList.reduce((groups, task) => {
+      if (typeof task !== 'function') {
+        groups[task.status] ||= [];
+        groups[task.status].push(task);
+      }
+      return groups;
+    }, {} as Record<TaskResult['status'], Array<AsyncTask | TaskResult>>);
+  }
+
+  private consumeNextTask = () => {
     if (this.processingTaskCount() >= this.config.maxWorkers) return null;
-    this.currentTaskIndex = this.currentTaskIndex++;
+    
+    ++this.currentTaskIndex;
+    if (this.currentTaskIndex >= this.taskList.length) return true;
     const localTaskIndex = this.currentTaskIndex;
 
     const task = this.taskList[localTaskIndex];
@@ -208,11 +231,13 @@ export default class PromisePool<TTaskResult, TError extends Error> {
           `Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`
         );
       }
+    } else {
+      console.error(`Invalid Task! Task #${localTaskIndex} must be a function.`, {task, localTaskIndex, currentTaskIndex: this.currentTaskIndex, taskLength: this.taskList.length});
     }
     return false;
   }
 
-  private getOrCompareTimestamp(timestamp?: TimerType) {
+  private getOrCompareTimestamp = (timestamp?: TimerType) => {
     if (!this.config.timestampCallback) return undefined;
     if (timestamp == null) return this.config.timestampCallback();
     if (this.config.timestampCallback.length >= 1) {
@@ -241,7 +266,7 @@ export default class PromisePool<TTaskResult, TError extends Error> {
 function defaultConfig(): PoolConfig {
   return {
     maxWorkers: 4,
-    backgroundRecheckInterval: 5,
+    backgroundRecheckInterval: 15,
     timestampCallback: () => Date.now(),
   };
 }

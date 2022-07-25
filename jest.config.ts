@@ -12,11 +12,10 @@ const config: Config.InitialOptions = {
   testPathIgnorePatterns: ['node_modules', 'dist'],
   resetMocks: true,
   resetModules: true,
-  globals: {
-    'ts-jest': {
-      useESM: true,
-    },
-  },
+  // globals: {
+  //   'ts-jest': {
+  //   },
+  // },
   transform: {},
 };
 
