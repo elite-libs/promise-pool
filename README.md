@@ -12,11 +12,11 @@ A background task processor focused on reliability and scalability.
 - [x] Concurrency limit.
 - [x] Retries. (Use `p-retry` for this.)
 - [x] Zero dependencies.
-<!-- - [x] ~~Progress events.~~ -->
 - [x] Error handling.
 - [ ] Singleton mode: Option to Auto-reset when `.done()`.
 - [x] Task scheduling & prioritization.
   - [x] Optionally `return` hints. (To support API's like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
+<!-- - [x] ~~Progress events.~~ -->
 
 ## Usage
 
