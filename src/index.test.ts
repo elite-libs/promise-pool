@@ -197,6 +197,7 @@ describe('PromisePool', () => {
     describe('Edge cases', () => {
       test('can handle multiple tasks & multiple calls to `.drain()`', async () => {
         const startTime = new Date().getTime();
+        const getRunTime = () => new Date().getTime() - startTime;
         const maxWorkers = 5;
         const pool = new Pool({ maxWorkers });
         const tasks_2ms = generateTasks(2 * maxWorkers, () => delay(2, 420));
@@ -211,11 +212,11 @@ describe('PromisePool', () => {
         // Add 10 'instant' tasks, shouldn't trip up in the `done()` call
         pool.add(...generateTasks());
         await delay(2);
-        expect(tasks_2ms[0]).toHaveBeenCalledTimes(1);
-        await pool.drain();
-        const runTime = new Date().getTime() - startTime;
-        expect(runTime).toBeGreaterThanOrEqual(4);
         expect(tasks_2ms[9]).toHaveBeenCalledTimes(1);
+        await pool.drain();
+        expect(getRunTime()).toBeGreaterThanOrEqual(4);
+        await delay(8);
+        expect(tasks_4ms[9]).toHaveBeenCalledTimes(1);
         return pool.done();
       });
     });

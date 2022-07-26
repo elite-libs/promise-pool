@@ -13,7 +13,7 @@ A background task processor focused on reliability and scalability.
 - [x] Retries. (Use `p-retry` for this.)
 - [x] Zero dependencies.
 - [x] Error handling.
-- [ ] Singleton mode: Option to Auto-reset when `.done()`. (Add `.drain()` method?)
+- [x] Singleton mode: Option to auto-reset when `.done()`. (Added `.drain()` method.)
 - [x] Task scheduling & prioritization.
   - [x] Optionally `return` hints. (To support API's like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
 <!-- - [x] ~~Progress events.~~ -->
@@ -45,7 +45,7 @@ pool.add(() => saveToS3(data));
 pool.add(() => expensiveBackgroundWork(data));
 
 // 3/3: REQUIRED: in order to ensure your tasks are executed, 
-// you must call `await pool.done()` at the end of your script.
+// you must await either `pool.drain()` or `pool.done()` at some point in your code (`done` prevents additional tasks from being added).
 await pool.done();
 ```
 
