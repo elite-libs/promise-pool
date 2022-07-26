@@ -1,5 +1,6 @@
 /**
- * Unpack Promise returns an object containing the following: a promise, with its `resolve()` & `reject()` methods.
+ * Unpack Promise returns an object containing the following:
+ *  a promise, with its `resolve()` & `reject()` methods.
  */
 export const unpackPromise = <TResult>(): {
   promise: Promise<TResult>;
@@ -13,10 +14,15 @@ export const unpackPromise = <TResult>(): {
     reject = rej;
   });
   return {
-    promise, resolve: resolve!, reject: reject!,
+    promise,
+    resolve: resolve!,
+    reject: reject!,
   };
 };
 
 /** `delay(ms)` will wait for a given number of milliseconds */
-export const delay = <TValue>(ms: number, value?: TValue) =>
-  new Promise(resolve => setTimeout(resolve, ms, value));
+export const delay = <TValue>(ms: number, value?: TValue) => new Promise((resolve) => {
+  setTimeout(
+    resolve, ms, value,
+  );
+});

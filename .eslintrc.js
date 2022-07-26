@@ -22,6 +22,18 @@ module.exports = {
   rules: {
     'no-console': 'off',
     '@typescript-eslint/no-redeclare': 'off',
+    '@typescript-eslint/lines-between-class-members': 'off',
+    eqeqeq: ['error', 'smart'],
+    'max-len': [
+      'error',
+      {
+        ignoreStrings: true,
+        ignoreTemplateLiterals: true,
+        ignoreRegExpLiterals: true,
+        ignoreComments: true,
+        code: 100,
+      },
+    ],
     'array-bracket-newline': [
       'error',
       {

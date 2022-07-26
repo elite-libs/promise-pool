@@ -84,7 +84,7 @@ class PromisePool {
 
   /**
    * Use the `add()` method to add tasks to the task pool.
-   * 
+   *
    * @param tasks - An array of tasks to be run in parallel.
    * @returns the number of threads to process the tasks. (Will never exceed `maxWorkers` or number of tasks.)
    */
@@ -94,7 +94,7 @@ class PromisePool {
 
     this.taskList.push(...tasks);
     return this.fillWorkPool();
-  };
+  }
 
   /**
    * The `drain()` method will wait for all tasks to complete, and allow more tasks to be added afterwards.
@@ -102,28 +102,33 @@ class PromisePool {
    * You must call either `.done()` or `.drain()` to ensure that all tasks are completed.
    *
    * This supports using Promise Pool as a singleton.
-   * 
+   *
    */
   drain() {
     // Object.freeze(this.taskList);
-    return Promise.allSettled([this.done(), this._completionPromise])
-    .finally(() => {
-      /* istanbul ignore next - Check for tasks added after done() was called. */
-      if (this.currentTaskIndex >= this.taskList.length)
-        /* istanbul ignore next - should never get called, just a failsafe against invalid state. */
-        throw Error(`New Tasks found after done() was called. Current Task Index ${this.currentTaskIndex} >= ${this.taskList.length}, Task List ${JSON.stringify(this.taskList)}`);
+    return Promise.allSettled([
+      this.done(),
+      this._completionPromise,
+    ])
+      .finally(() => {
+        /* istanbul ignore next - Check for tasks added after done() was called. */
+        if (this.currentTaskIndex >= this.taskList.length) {
+          /* istanbul ignore next - should never get called, just a failsafe against invalid state. */
+          throw Error(`New Tasks found after done() was called. Current Task Index ${this.currentTaskIndex} >= ${this.taskList.length}, Task List ${JSON.stringify(this.taskList)}`);
+        }
 
-      return this.forceReset();
-    })
+        return this.forceReset();
+      });
   }
 
-/**
- * The `done()` method will wait for all tasks to complete, preventing any more being processed afterwards.
- * @returns 
- */
+  /**
+   * The `done()` method will wait for all tasks to complete, preventing any more being processed afterwards.
+   * @returns
+   */
   done() {
-    if (this._backgroundIntervalPromise != undefined)
+    if (this._backgroundIntervalPromise != null) {
       return this._backgroundIntervalPromise.promise;
+    }
     if (this._errors.length > 0) {
       return Promise.reject(new Error(`Promise Pool failed! ${this._errors.length} errors occurred. ${JSON.stringify(this._stats)}`));
     }
@@ -133,7 +138,7 @@ class PromisePool {
      || setInterval(this.checkIfComplete.bind(this),
        this.config.backgroundRecheckInterval);
     return this._backgroundIntervalPromise.promise;
-  };
+  }
 
   private forceReset() {
     this.currentTaskIndex = -1;
@@ -151,7 +156,7 @@ class PromisePool {
   /**
    * When true, the workPool is full, and _**MAY**_ have completed.
    */
-   private get isWorkPoolFullToEnd() {
+  private get isWorkPoolFullToEnd() {
     return this.currentTaskIndex >= this.taskList.length - 1;
   }
 
@@ -174,7 +179,7 @@ class PromisePool {
         // TODO: add configurable error handler
         .catch(console.error);
     }
-  };
+  }
 
   /**
    * Fill the workPool with tasks.
@@ -194,7 +199,7 @@ class PromisePool {
       this.consumeNextTask();
     }
     return workCount;
-  };
+  }
 
   private processingTaskCount() {
     return this.workPool.filter((task) => typeof task === 'object').length;
@@ -207,7 +212,7 @@ class PromisePool {
   private consumeNextTask() {
     // if (this.processingTaskCount() >= this.config.maxWorkers) return null;
 
-    if (this.currentTaskIndex >= this.taskList.length -1) return true;
+    if (this.currentTaskIndex >= this.taskList.length - 1) return true;
     this.currentTaskIndex += 1;
     const localTaskIndex = this.currentTaskIndex;
 
@@ -251,7 +256,7 @@ class PromisePool {
       }
     }
     return false;
-  };
+  }
 
   private getOrCompareTimestamp(timestamp?: TimerType) {
     if (!this.config.timestampCallback) return undefined;
@@ -264,7 +269,7 @@ class PromisePool {
       return Number(bigDiff.toString());
     }
     return bigDiff;
-  };
+  }
 
   constructor(config: Partial<PoolConfig> = defaultConfig()) {
     this.config = Object.freeze({
