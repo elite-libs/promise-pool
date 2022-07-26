@@ -13,7 +13,7 @@ A background task processor focused on reliability and scalability.
 - [x] Retries. (Use `p-retry` for this.)
 - [x] Zero dependencies.
 - [x] Error handling.
-- [ ] Singleton mode: Option to Auto-reset when `.done()`.
+- [ ] Singleton mode: Option to Auto-reset when `.done()`. (Add `.drain()` method?)
 - [x] Task scheduling & prioritization.
   - [x] Optionally `return` hints. (To support API's like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
 <!-- - [x] ~~Progress events.~~ -->
