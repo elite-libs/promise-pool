@@ -21,15 +21,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "lib": [
-      "esnext",
-      "ESNext.AsyncIterable",
-      "ESNext.Promise",
-      "ES2015.Collection",
-      "ES2018.AsyncGenerator",
-      "ES2021.Promise",
-    ],
-    "module": "esnext",
+    "lib": ["ES2020"],
+    "module": "CommonJS",
     "moduleResolution": "node",
     "noFallthroughCasesInSwitch": true,
     "outDir": "dist",
@@ -45,7 +38,7 @@
         "./src/*"
       ]
     },
-    "target": "ESNext",
+    "target": "ES2020",
     "useUnknownInCatchVariables": false
   },
   "include": [

@@ -142,7 +142,7 @@ class PromisePool {
     }
     this.status = 'running';
     this._backgroundIntervalPromise = unpackPromise<TaskResult[]>();
-    this._checkIfCompleteInterval ||= setInterval(this.checkIfComplete.bind(this),
+    this._checkIfCompleteInterval = this._checkIfCompleteInterval || setInterval(this.checkIfComplete.bind(this),
       this.config.backgroundRecheckInterval);
     return this._backgroundIntervalPromise.promise;
   };

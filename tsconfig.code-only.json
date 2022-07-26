@@ -4,6 +4,9 @@
   },
   "compilerOptions": {
     "rootDir": "./src",
+    "target": "ES2019",
+    "lib": ["ES2019"],
+    "module": "commonjs",
   },
   "include": [
     "./src/**/*.ts",
