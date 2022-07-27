@@ -1,4 +1,7 @@
-/* eslint @typescript-eslint/no-explicit-any: 0 */
+/**
+ * Unpack Promise returns an object containing the following:
+ *  a promise, with its `resolve()` & `reject()` methods.
+ */
 export const unpackPromise = <TResult>(): {
   promise: Promise<TResult>;
   resolve: (value: TResult | PromiseLike<TResult>) => void;
@@ -10,8 +13,16 @@ export const unpackPromise = <TResult>(): {
     resolve = res;
     reject = rej;
   });
-
   return {
-    promise, resolve: resolve!, reject: reject!,
+    promise,
+    resolve: resolve!,
+    reject: reject!,
   };
 };
+
+/** `delay(ms)` will wait for a given number of milliseconds */
+export const delay = <TValue>(ms: number, value?: TValue) => new Promise((resolve) => {
+  setTimeout(
+    resolve, ms, value,
+  );
+});

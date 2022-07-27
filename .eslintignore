@@ -4,3 +4,4 @@ coverage
 .eslintrc.js
 *.test.ts
 *.config.ts
+examples

@@ -54,58 +54,104 @@ type TaskResult = {
  *
  */
 class PromisePool {
-  config: Readonly<PoolConfig> = {
-    maxWorkers: 1,
-    timestampCallback: Date.now,
-    backgroundRecheckInterval: 5,
-  };
-
-  timestampCallback: TimerCallback;
-
-  private _backgroundIntervalPromise: ReturnType<typeof unpackPromise<TaskResult[]>> | null = null;
-
-  private currentTaskIndex = -1;
-
-  taskList: Array<AsyncTask | TaskResult> = [];
-
-  workPool: Array<Promise<unknown> | boolean | null> = [];
-
+  config: Readonly<PoolConfig> = defaultConfig();
   status: 'initialized' | 'running' | 'done' | 'canceled' = 'initialized';
 
-  private _completionPromise?: Promise<void>;
-
   /** Used to manage a setInterval monitoring completion */
-  private _checkIfCompleteInterval?: NodeJS.Timer;
-
+  private _backgroundIntervalTimer?: NodeJS.Timer;
+  private _backgroundIntervalPromise?: ReturnType<typeof unpackPromise<TaskResult[]>> = undefined;
+  private _completionPromise?: Promise<void>;
+  private currentTaskIndex = -1;
   private _errors: Array<Error> = [];
-
-  get isDone() {
-    return this.status === 'done';
-  }
+  private taskList: Array<AsyncTask | TaskResult> = [];
+  private workPool: Array<Promise<unknown> | boolean | null> = [];
+  private timestampCallback: TimerCallback;
 
   get _stats() {
     return {
+      currentTaskIndex: this.currentTaskIndex,
+
       taskListSize: this.taskList.length,
       workPoolSize: this.workPool.length,
 
-      currentTaskIndex: this.currentTaskIndex,
-
       processingTaskCount: this.processingTaskCount(),
       isWorkPoolFullToEnd: this.isWorkPoolFullToEnd,
-      isDone: this.isDone,
       status: this.status,
 
       config: this.config,
     };
   }
 
-  add = <TTaskType>(...tasks: AsyncTask<TTaskType>[]): number => {
-    if (this.isDone) throw new Error('Task Rejected! Pool finalized, done() called.');
+  /**
+   * Use the `add()` method to add tasks to the task pool.
+   *
+   * @param tasks - An array of tasks to be run in parallel.
+   * @returns the number of threads to process the tasks. (Will never exceed `maxWorkers` or number of tasks.)
+   */
+  add<TTaskType>(...tasks: AsyncTask<TTaskType>[]): number {
+    if (this.status === 'done') throw new Error('Task Rejected! Pool finalized, done() called.');
     if (!tasks || !tasks.every((task) => typeof task === 'function')) throw new Error('Task Invalid! Task is not a function.');
 
     this.taskList.push(...tasks);
     return this.fillWorkPool();
-  };
+  }
+
+  /**
+   * The `drain()` method will wait for all tasks to complete, and allow more tasks to be added afterwards.
+   *
+   * You must call either `.done()` or `.drain()` to ensure that all tasks are completed.
+   *
+   * This supports using Promise Pool as a singleton.
+   *
+   */
+  drain() {
+    // Object.freeze(this.taskList);
+    return Promise.allSettled([
+      this.done(),
+      this._completionPromise,
+    ])
+      .finally(() => {
+        /* istanbul ignore next - Check for tasks added after done() was called. */
+        if (this.currentTaskIndex >= this.taskList.length) {
+          /* istanbul ignore next - should never get called, just a failsafe against invalid state. */
+          throw Error(`New Tasks found after done() was called. Current Task Index ${this.currentTaskIndex} >= ${this.taskList.length}, Task List ${JSON.stringify(this.taskList)}`);
+        }
+
+        return this.forceReset();
+      });
+  }
+
+  /**
+   * The `done()` method will wait for all tasks to complete, preventing any more being processed afterwards.
+   * @returns
+   */
+  done() {
+    if (this._backgroundIntervalPromise != null) {
+      return this._backgroundIntervalPromise.promise;
+    }
+    if (this._errors.length > 0) {
+      return Promise.reject(new Error(`Promise Pool failed! ${this._errors.length} errors occurred. ${JSON.stringify(this._stats)}`));
+    }
+    this.status = 'running';
+    this._backgroundIntervalPromise = unpackPromise<TaskResult[]>();
+    this._backgroundIntervalTimer = this._backgroundIntervalTimer
+     || setInterval(this.checkIfComplete.bind(this),
+       this.config.backgroundRecheckInterval);
+    return this._backgroundIntervalPromise.promise;
+  }
+
+  private forceReset() {
+    this.currentTaskIndex = -1;
+    this.status = 'initialized';
+    this.taskList = [];
+    this.workPool = [];
+    this._errors = [];
+    this._completionPromise = undefined;
+    this._backgroundIntervalPromise = undefined;
+    clearInterval(this._backgroundIntervalTimer);
+    this._backgroundIntervalTimer = undefined;
+    return this;
+  }
 
   /**
    * When true, the workPool is full, and _**MAY**_ have completed.
@@ -117,7 +163,7 @@ class PromisePool {
   /**
    * Check if the workPool is full, and if so wait for all tasks to resolve or reject.
    */
-  private checkIfComplete = () => {
+  private checkIfComplete() {
     // console.log('checkIfComplete._stats', this._stats);
     if (this.isWorkPoolFullToEnd && !this._completionPromise) {
       // Now we need to wait for the pool to finish (or verify it has finished)
@@ -126,27 +172,14 @@ class PromisePool {
           if (this._backgroundIntervalPromise != null) {
             this._backgroundIntervalPromise.resolve(this.getCompletedTasks());
             this.status = 'done';
-            clearInterval(this._checkIfCompleteInterval);
-            this._checkIfCompleteInterval = undefined;
+            clearInterval(this._backgroundIntervalTimer);
+            this._backgroundIntervalTimer = undefined;
           }
         })
         // TODO: add configurable error handler
         .catch(console.error);
     }
-  };
-
-  done = () => {
-    if (this._backgroundIntervalPromise != null) return this._backgroundIntervalPromise.promise;
-    if (this._errors.length > 0) {
-      return Promise.reject(new Error(`Promise Pool failed! ${this._errors.length} errors occurred. ${JSON.stringify(this._stats)}`));
-    }
-    this.status = 'running';
-    this._backgroundIntervalPromise = unpackPromise<TaskResult[]>();
-    this._checkIfCompleteInterval = this._checkIfCompleteInterval
-     || setInterval(this.checkIfComplete.bind(this),
-       this.config.backgroundRecheckInterval);
-    return this._backgroundIntervalPromise.promise;
-  };
+  }
 
   /**
    * Fill the workPool with tasks.
@@ -155,7 +188,7 @@ class PromisePool {
    * The `for` loop synchronously auto-sizes the worker pool,
    *  under the `maxWorker` limit.
    */
-  private fillWorkPool = () => {
+  private fillWorkPool() {
     let workCount = 0;
     for (
       let i = this.processingTaskCount();
@@ -166,17 +199,21 @@ class PromisePool {
       this.consumeNextTask();
     }
     return workCount;
-  };
+  }
 
-  private processingTaskCount = () => this.workPool.filter((task) => typeof task === 'object').length;
+  private processingTaskCount() {
+    return this.workPool.filter((task) => typeof task === 'object').length;
+  }
 
-  private getCompletedTasks = (): TaskResult[] => this.taskList.filter((task) => typeof task === 'object' && task.status) as TaskResult[];
+  private getCompletedTasks(): TaskResult[] {
+    return this.taskList.filter((task) => typeof task === 'object' && task.status) as TaskResult[];
+  }
 
-  private consumeNextTask = () => {
+  private consumeNextTask() {
     // if (this.processingTaskCount() >= this.config.maxWorkers) return null;
 
+    if (this.currentTaskIndex >= this.taskList.length - 1) return true;
     this.currentTaskIndex += 1;
-    if (this.currentTaskIndex >= this.taskList.length) return true;
     const localTaskIndex = this.currentTaskIndex;
 
     const task = this.taskList[localTaskIndex];
@@ -219,9 +256,9 @@ class PromisePool {
       }
     }
     return false;
-  };
+  }
 
-  private getOrCompareTimestamp = (timestamp?: TimerType) => {
+  private getOrCompareTimestamp(timestamp?: TimerType) {
     if (!this.config.timestampCallback) return undefined;
     // if (timestamp == null) return this.config.timestampCallback();
     if (this.config.timestampCallback.length >= 1) {
@@ -232,7 +269,7 @@ class PromisePool {
       return Number(bigDiff.toString());
     }
     return bigDiff;
-  };
+  }
 
   constructor(config: Partial<PoolConfig> = defaultConfig()) {
     this.config = Object.freeze({
@@ -240,13 +277,23 @@ class PromisePool {
       ...config,
     });
     this.timestampCallback = this.config.timestampCallback || (() => Number.NaN);
+    this.add = this.add.bind(this);
+    this.done = this.done.bind(this);
+    this.drain = this.drain.bind(this);
+    this.forceReset = this.forceReset.bind(this);
+    this.checkIfComplete = this.checkIfComplete.bind(this);
+    this.fillWorkPool = this.fillWorkPool.bind(this);
+    this.processingTaskCount = this.processingTaskCount.bind(this);
+    this.getCompletedTasks = this.getCompletedTasks.bind(this);
+    this.consumeNextTask = this.consumeNextTask.bind(this);
+    this.getOrCompareTimestamp = this.getOrCompareTimestamp.bind(this);
   }
 }
 
 function defaultConfig(): PoolConfig {
   return {
     maxWorkers: 4,
-    backgroundRecheckInterval: 15,
+    backgroundRecheckInterval: 5,
     timestampCallback: () => Date.now(),
   };
 }

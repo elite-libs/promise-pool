@@ -50,6 +50,7 @@
     "__snapshots__",
     // "**/*.test.js",
     // "**/*.test.ts",
+    "examples",
     "dist",
     "node_modules",
     "**/tsup.config.ts"
