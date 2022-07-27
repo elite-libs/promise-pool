@@ -32,7 +32,9 @@ npm install @elite-libs/promise-pool
 yarn add @elite-libs/promise-pool
 ```
 
-### Example
+### Examples
+
+#### Simplified Usage
 
 ```typescript
 import PromisePool from '@elite-libs/promise-pool';
@@ -48,6 +50,97 @@ pool.add(() => expensiveBackgroundWork(data));
 // you must await either `pool.drain()` or `pool.done()` at some point in your code (`done` prevents additional tasks from being added).
 await pool.done();
 ```
+
+#### Advanced Usage
+
+In this example we'll use a singleton pattern to ensure we have only 1 `Promise Pool` instance per process.
+
+```typescript
+// `./src/services/taskPool.ts`
+import PromisePool from '@elite-libs/promise-pool';
+
+export const taskPool = new PromisePool({
+  maxWorkers: 6, // Optional. Default is `4`.
+});
+```
+
+Then from inside your app (Lambda function, Express app, etc.) you can use the `taskPool` instance to add tasks to the pool.
+
+```typescript
+// Example Lambda function
+// `./src/handlers/user.handler.ts`
+import { taskPool } from './services/taskPool';
+export const handler = async (event, context) => {
+  const data = getDataFromEvent(event);
+  taskPool.add(() => saveToS3(data));
+  taskPool.add(() => expensiveBackgroundWork(data));
+  await taskPool.drain();
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: 'Success',
+    }),
+  }
+}
+```
+
+Note the `await taskPool.drain()` call. This is required to ensure your tasks are executed.
+
+You could also utilize `Promise Pool` in [`middy`](https://middy.js.org/) middleware:
+
+##### Per-request pool instance
+
+```typescript
+import PromisePool, { PoolConfig } from '@elite-libs/promise-pool';
+
+const defaults = {};
+
+const promisePoolMiddleware = (opts: Partial<PoolConfig> = {}) => {
+  const options = { ...defaults, ...opts };
+
+  return {
+    before: (request) => {
+      Object.assign(request.context, {
+        taskPool: new PromisePool(options),
+      });
+    },
+    after: async (request) => {
+      await request.context.taskPool.drain();
+    }
+  }
+}
+
+export default promisePoolMiddleware;
+```
+
+##### Singleton pool instance middleware
+
+```typescript
+// Important: Import a global instance of `Promise Pool`
+import { taskPool } from './services/taskPool';
+
+const taskPoolMiddleware = () => ({
+  before: (request) => {
+    Object.assign(request.context, { taskPool });
+  },
+  after: async (request) => {
+    await request.context.taskPool.drain();
+  }
+});
+
+export default taskPoolMiddleware;
+```
+
+Now you can use `taskPool` in your Lambda function:
+
+```typescript
+request.context.taskPool.add(() => saveToS3(data));
+```
+
+Now the `drain()` method will be called automatically `after()` every Lambda function returns.
+
+> See [`/examples`](/examples/) folder for more examples.
 
 <!--
 ## Config Options
