@@ -140,6 +140,31 @@ request.context.taskPool.add(() => saveToS3(data));
 
 Now the `drain()` method will be called automatically `after()` every Lambda function returns.
 
+
+#### Express Example
+
+```js
+// `./src/middleware/taskPool.ts`
+import { taskPool } from "../services/taskPool.mjs";
+
+export const taskPoolMiddleware = (req, res, next) => {
+  req.taskPool = taskPool;
+  next();
+};
+```
+  
+Then you can use `taskPool` in your Express app:
+
+```js
+import { taskPool } from "../services/taskPool.mjs";
+
+export const taskPoolMiddleware = (req, res, next) => {
+  req.taskPool = taskPool;
+  next();
+};
+```
+
+
 > See [`/examples`](/examples/) folder for more examples.
 
 <!--
