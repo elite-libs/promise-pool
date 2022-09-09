@@ -254,15 +254,15 @@ describe('PromisePool', () => {
         // Add 10 'instant' tasks, shouldn't trip up in the `done()` call
         await delay(4);
         expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
-        expect(timerP1.getRuntime()).toBeLessThan(16);
+        expect(timerP1.getRuntime()).toBeLessThan(20);
         drainResults.push(await p2);
         // console.log('drainResults', drainResults);
         await pool.drain();
         expect(timerP1.getRuntime()).toBeLessThan(25 * 3);
-        expect(timerP1.getRuntime()).toBeGreaterThan(12);
+        expect(timerP1.getRuntime()).toBeGreaterThan(10);
         await delay(38);
         await pool.done();
-        await delay(38);
+        // await delay(38);
         expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
         // console.dir(tasks_2ms.map(getMockStats), { depth: 10 });
         expect(tasks_2ms[8]).toHaveBeenCalledTimes(1);
