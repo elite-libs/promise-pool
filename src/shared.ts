@@ -21,8 +21,7 @@ export const unpackPromise = <TResult>(): {
 };
 
 /** `delay(ms)` will wait for a given number of milliseconds */
-export const delay = <TValue>(ms: number, value?: TValue) => new Promise((resolve) => {
-  setTimeout(
-    resolve, ms, value,
-  );
-});
+export const delay = <TValue>(ms: number, value?: TValue): Promise<TValue> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms, value);
+  });

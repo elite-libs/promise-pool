@@ -32,6 +32,28 @@ npm install @elite-libs/promise-pool
 yarn add @elite-libs/promise-pool
 ```
 
+## New Features
+
+### **September, 2022**
+
+- _What?_ Adds Smart `.drain()` behavior.
+  - _Why?_
+    1. Speeds up concurrent server environments!
+    1. prevents several types of difficult (ghost) bugs!
+        - stack overflows/mem access violations,
+        - exceeding rarely hit OS limits, (e.g. max open handle/file/socket limits)
+        - exceeding limits of Network hardware (e.g. connections/sec, total open socket limit, etc.)
+        - uneven observed wait times.
+  - _How?_ Only awaits for the latest `.drain()` caller.
+  - _Who?_ `Server` + `Singleton` use cases will see most of the benefit.
+  - _Errata_
+    - There's several competing (tortured) metaphors, please suggest more & let me know which makes most sense.
+      - Like a relay race's series of baton handoffs. As soon as you handoff, your race is over & the next runner must either run until finish (wait to end) OR hand-off the job to someone new.
+      - A tiny Queue, with size of **one!**
+      - Anectode: Group of friends who had rule: whoever is latest/last has to pay for the planned outing.
+      - A 'Take-a-penny-leave-a-penny' dish only big enough for 1 penny.
+      - This is similar to the feature in MongoDB called the `Write Threshold/Concern` setting, or in Distributed SQL Replication where you can set a minimum # of servers which must accept and confirm the data before it's considered **safely written** in the cluster.
+
 ### Examples
 
 #### Simplified Usage

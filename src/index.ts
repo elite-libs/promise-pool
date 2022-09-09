@@ -1,4 +1,4 @@
-import { unpackPromise } from './shared';
+import { unpackPromise, delay } from './shared';
 
 export interface PoolConfig {
   maxWorkers: number;
@@ -38,6 +38,13 @@ type TaskResult = {
   }
 );
 
+interface DrainSummary {
+  taskCounts: {
+    inProcessing: number;
+    completed: number;
+  }
+}
+
 /**
  * Worker pool for running tasks in parallel.
  *
@@ -60,6 +67,7 @@ class PromisePool {
   /** Used to manage a setInterval monitoring completion */
   private _backgroundIntervalTimer?: NodeJS.Timer;
   private _backgroundIntervalPromise?: ReturnType<typeof unpackPromise<TaskResult[]>> = undefined;
+  private _lastDrain?: ReturnType< typeof unpackPromise<DrainSummary>> = undefined;
   private _completionPromise?: Promise<void>;
   private currentTaskIndex = -1;
   private _errors: Array<Error> = [];
@@ -104,11 +112,28 @@ class PromisePool {
    * This supports using Promise Pool as a singleton.
    *
    */
-  drain() {
+  async drain() {
+    const previousDrain = this._lastDrain;
+    if (previousDrain) {
+      // create new promise, resolve old one - AFTER DELAY
+      delay(5).then(() => {
+        previousDrain.resolve({
+          taskCounts: {
+            completed: this.getCompletedTasks().length,
+            inProcessing: this.processingTaskCount(),
+          }
+        });
+      })
+    }
+    // // capture stack info
+    // const fakeError = new Error('stack tracking helper');
+    // console.log('fake', cleanStack(fakeError.stack))
+    this._lastDrain = unpackPromise();
+
     // Object.freeze(this.taskList);
-    return Promise.allSettled([
+    return Promise.race([
       this.done(),
-      this._completionPromise,
+      this._lastDrain,
     ])
       .finally(() => {
         /* istanbul ignore next - Check for tasks added after done() was called. */
@@ -126,6 +151,7 @@ class PromisePool {
    * @returns
    */
   done() {
+    if (this._lastDrain != null) return this._lastDrain;
     if (this._backgroundIntervalPromise != null) {
       return this._backgroundIntervalPromise.promise;
     }
@@ -146,10 +172,11 @@ class PromisePool {
     this.taskList = [];
     this.workPool = [];
     this._errors = [];
-    this._completionPromise = undefined;
-    this._backgroundIntervalPromise = undefined;
     clearInterval(this._backgroundIntervalTimer);
     this._backgroundIntervalTimer = undefined;
+    this._completionPromise = undefined;
+    this._backgroundIntervalPromise = undefined;
+    this._lastDrain = undefined;
     return this;
   }
 
@@ -245,7 +272,9 @@ class PromisePool {
                 runtime: this.getOrCompareTimestamp(startTime),
               };
             })
-            .finally(() => this.consumeNextTask());
+            .finally(() => {
+              this.consumeNextTask()
+            });
         } else {
           const error = new Error(`Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`);
           this._errors.push(error);
@@ -288,6 +317,13 @@ class PromisePool {
     this.consumeNextTask = this.consumeNextTask.bind(this);
     this.getOrCompareTimestamp = this.getOrCompareTimestamp.bind(this);
   }
+}
+
+const cleanStack = (stack?: string | string[]) => {
+  if (!stack) return [];
+  if (typeof stack === 'string') stack = stack.split('\n');
+  if (!Array.isArray(stack)) throw new Error(`Invalid stack! Expected Array, received ${typeof stack}`);
+  return stack?.filter((line) => (line.includes('mock') || /[Jj]est/g.test(line)) === false) || stack;
 }
 
 function defaultConfig(): PoolConfig {
