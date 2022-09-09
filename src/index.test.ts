@@ -19,7 +19,7 @@ describe('PromisePool', () => {
       const secondDrainPromise = pool.drain();
       // now `await initialDrainPromise` should resolve immediately!
       await initialDrainPromise;
-      expect(getRuntime()).toBeLessThanOrEqual(10);
+      expect(getRuntime()).toBeLessThanOrEqual(16);
       // And `secondDrainPromise` should wait 10-20ms
       await secondDrainPromise;
       await pool.drain();
@@ -258,7 +258,7 @@ describe('PromisePool', () => {
         drainResults.push(await p2);
         // console.log('drainResults', drainResults);
         await pool.drain();
-        expect(timerP1.getRuntime()).toBeLessThan(24 * 1.25);
+        expect(timerP1.getRuntime()).toBeLessThan(25 * 2.5);
         expect(timerP1.getRuntime()).toBeGreaterThan(12);
         await delay(38);
         await pool.done();
