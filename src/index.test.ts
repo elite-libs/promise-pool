@@ -38,7 +38,7 @@ describe('PromisePool', () => {
       //   getMockStats(drainSpy),
       //   pool._stats
       // );
-      expect(getRuntime()).toBeLessThan(3.5 * TASK_DELAY_MS);
+      expect(getRuntime()).toBeLessThan(5 * TASK_DELAY_MS);
       expect(getRuntime()).toBeGreaterThanOrEqual(2 * TASK_DELAY_MS);
     });
   });
@@ -254,7 +254,7 @@ describe('PromisePool', () => {
         // Add 10 'instant' tasks, shouldn't trip up in the `done()` call
         await delay(4);
         expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
-        expect(timerP1.getRuntime()).toBeLessThan(8);
+        expect(timerP1.getRuntime()).toBeLessThan(16);
         drainResults.push(await p2);
         // console.log('drainResults', drainResults);
         await pool.drain();
@@ -294,7 +294,7 @@ describe('Test Helpers', () => {
     const timer = startRuntimeHelper();
     await delay(3);
     expect(timer.getRuntime()).toBeGreaterThanOrEqual(2);
-    expect(timer.getRuntime()).toBeLessThanOrEqual(7);
+    expect(timer.getRuntime()).toBeLessThanOrEqual(30);
   });
 });
 
