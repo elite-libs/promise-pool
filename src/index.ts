@@ -65,7 +65,7 @@ type TaskResult = {
  */
 class PromisePool {
   config: Readonly<PoolConfig> = defaultConfig();
-  status: 'initialized' | 'running' | 'done' | 'canceled' = 'initialized';
+  status: 'initialized' | 'running' | 'done' | 'canceled' | 'finalizing' = 'initialized';
 
   /** Used to manage a setInterval monitoring completion */
   private _backgroundIntervalTimer?: NodeJS.Timer;
@@ -106,7 +106,7 @@ class PromisePool {
    * @returns the number of threads to process the tasks. (Will never exceed `maxWorkers` or number of tasks.)
    */
   add<TTaskType>(...tasks: AsyncTask<TTaskType>[]): number {
-    if (this.status === 'done') throw new Error('Task Rejected! Pool finalized, done() called.');
+    if (this.status === 'done' || this.status === 'finalizing') throw new Error('Task Rejected! Pool finalized, done() called.');
     if (!tasks || !tasks.every((task) => typeof task === 'function')) throw new Error('Task Invalid! Task is not a function.');
 
     this.taskList.push(...tasks);
@@ -129,21 +129,23 @@ class PromisePool {
 
     // Object.freeze(this.taskList);
     return Promise.race([
-      this.done(),
+      this.done(false),
       nextPromise.promise,
-    ])
-      .finally(() => {
-        if (this.status === 'done') {
-          /* istanbul ignore next - Check for tasks added after done() was called. */
-          if (this.currentTaskIndex >= this.taskList.length) {
-            /* istanbul ignore next - should never get called, just a failsafe against invalid state. */
-            throw Error(`New Tasks found after done() was called. Current Task Index ${this.currentTaskIndex} >= ${this.taskList.length}, Task List ${JSON.stringify(this.taskList)}`);
-          }
-          // TODO: Add log to track forceResets here.
-          return this.forceReset();
-        }
-        return this.status;
-      });
+    ]);
+    // .finally();
+  }
+
+  // eslint-disable-next-line consistent-return
+  private checkDoneAndReset() {
+    if (this.status === 'done') {
+      /* istanbul ignore next - Check for tasks added after done() was called. */
+      if (this.currentTaskIndex >= this.taskList.length) {
+        /* istanbul ignore next - should never get called, just a failsafe against invalid state. */
+        throw Error(`New Tasks found after done() was called. Current Task Index ${this.currentTaskIndex} >= ${this.taskList.length}, Task List ${JSON.stringify(this.taskList)}`);
+      }
+      // TODO: Add log to track forceResets here.
+      return this.forceReset();
+    }
   }
 
   /** Utilizes `this.resolveHeadDrain()` */
@@ -177,7 +179,7 @@ class PromisePool {
    * The `done()` method will wait for all tasks to complete, preventing any more being processed afterwards.
    * @returns
    */
-  done() {
+  done(finalize = true) {
     // if (this._lastDrain != null) return this._lastDrain.promise;
     if (this._backgroundIntervalPromise != null) {
       return this._backgroundIntervalPromise.promise;
@@ -185,27 +187,32 @@ class PromisePool {
     if (this._errors.length > 0) {
       return Promise.reject(new Error(`Promise Pool failed! ${this._errors.length} errors occurred. ${JSON.stringify(this._stats)}`));
     }
-    this.status = 'running';
+    this.status = finalize ? 'finalizing' : 'running';
     this._backgroundIntervalPromise = unpackPromise<TaskResult[]>();
     // TODO: Log if interval is running
     // Begin background consumption of task list using `checkIfComplete()`
     this._backgroundIntervalTimer = this._backgroundIntervalTimer
      // eslint-disable-next-line @typescript-eslint/unbound-method
      || setInterval(this.checkIfComplete, this.config.backgroundRecheckInterval);
-    return this._backgroundIntervalPromise.promise;
+    return this._backgroundIntervalPromise.promise.then((results) => {
+      this.status = finalize ? 'done' : 'initialized';
+      return results;
+    });
   }
 
   private forceReset() {
     // TODO: Add logging to verify expected # of taskList items, currentTaskIndex, workPool
+    clearInterval(this._backgroundIntervalTimer);
+    this._backgroundIntervalTimer = undefined;
+    this._backgroundIntervalPromise = undefined;
+
     this.currentTaskIndex = -1;
-    this.status = 'initialized';
+    /* istanbul ignore next */
+    this.status = this.status === 'finalizing' ? 'done' : 'initialized';
     this.taskList = [];
     this.workPool = [];
     this._errors = [];
-    clearInterval(this._backgroundIntervalTimer);
-    this._backgroundIntervalTimer = undefined;
     this._completionPromise = undefined;
-    this._backgroundIntervalPromise = undefined;
     this._lastDrain = [];
     return this;
   }
@@ -230,8 +237,7 @@ class PromisePool {
           if (this._backgroundIntervalPromise != null) {
             this._backgroundIntervalPromise.resolve(this.getCompletedTasks());
             this.status = 'done';
-            clearInterval(this._backgroundIntervalTimer);
-            this._backgroundIntervalTimer = undefined;
+            this.checkDoneAndReset();
           }
         })
         // TODO: add configurable error handler

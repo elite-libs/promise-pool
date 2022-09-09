@@ -87,7 +87,7 @@ describe('PromisePool', () => {
       pool.add(task);
       const p1 = pool.done();
       const p2 = pool.done();
-      expect(p1).toBe(p2);
+      expect(p1).not.toBe(p2);
       return p1;
     });
 
@@ -250,7 +250,7 @@ describe('PromisePool', () => {
         const p2 = pool.drain();
         const timerP1 = startRuntimeHelper();
         drainResults.push(await p1);
-        expect(timerP1.getRuntime()).toBeLessThanOrEqual(3);
+        expect(timerP1.getRuntime()).toBeLessThanOrEqual(6);
         // Add 10 'instant' tasks, shouldn't trip up in the `done()` call
         await delay(4);
         expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
