@@ -1,14 +1,53 @@
 import Pool from './index';
 import { delay } from './shared';
+import util from 'util';
+const { inspect } = util;
 
 describe('PromisePool', () => {
+  describe('Smart drain technology', () => {
+    it('should await only last task', async () => {
+      const TASK_DELAY_MS = 10;
+      const pool = new Pool({ maxWorkers: 5 });
+      // const drainSpy = jest.spyOn(pool, 'drain');
+
+      let { getRuntime } = startRuntimeHelper();
+      const tasks = generateTasks(10, (index) => delay(TASK_DELAY_MS, index));
+      pool.add(...tasks);
+      // Save some promises returned by calling `.drain()` (and don't await yet)
+      const initialDrainPromise = pool.drain();
+      // initialDrainPromise should be the only 'timer' waiting -- until we call .drain again!
+      const secondDrainPromise = pool.drain();
+      // now `await initialDrainPromise` should resolve immediately!
+      await initialDrainPromise;
+      expect(getRuntime()).toBeLessThanOrEqual(16);
+      // And `secondDrainPromise` should wait 10-20ms
+      await secondDrainPromise;
+      await pool.drain();
+      // console.log('drainSpy:', getRuntime(), getMockStats(drainSpy));
+      // console.dir(drainSpy.mock.results, { depth: 10 });
+      // console.dir(
+      //   await Promise.all(drainSpy.mock.results.map((p) => p.value)),
+      //   { depth: 10 }
+      // );
+
+      await pool.done();
+      // console.log(
+      //   'drainSpy2:',
+      //   getRuntime(),
+      //   // @ts-expect-error
+      //   getMockStats(drainSpy),
+      //   pool._stats
+      // );
+      expect(getRuntime()).toBeLessThan(7 * TASK_DELAY_MS);
+      expect(getRuntime()).toBeGreaterThanOrEqual(2 * TASK_DELAY_MS);
+    });
+  });
+
   describe('Core functionality', () => {
     test('can run a single task', async () => {
       const pool = new Pool();
       const task = jest.fn(() => Promise.resolve(420));
-      // const processingCount =
       pool.add(task);
-      // console.log({ processingCount });
       const p = pool.done();
       await p;
       expect(task).toHaveBeenCalledTimes(1);
@@ -16,8 +55,8 @@ describe('PromisePool', () => {
     });
 
     test('can run multiple batches of tasks (singleton mode)', async () => {
-      const pool = new Pool();
-      const taskList = generateTasks(8);
+      const pool = new Pool({ maxWorkers: 4, backgroundRecheckInterval: 1 });
+      const taskList = generateTasks(8, (index) => delay(1, index));
       pool.add(...taskList);
       expect(pool._stats.currentTaskIndex).toBe(3);
       await pool.drain();
@@ -48,7 +87,7 @@ describe('PromisePool', () => {
       pool.add(task);
       const p1 = pool.done();
       const p2 = pool.done();
-      expect(p1).toBe(p2);
+      expect(p1).not.toBe(p2);
       return p1;
     });
 
@@ -196,41 +235,93 @@ describe('PromisePool', () => {
 
     describe('Edge cases', () => {
       test('can handle multiple tasks & multiple calls to `.drain()`', async () => {
-        const startTime = new Date().getTime();
-        const getRunTime = () => new Date().getTime() - startTime;
         const maxWorkers = 5;
         const pool = new Pool({ maxWorkers });
-        const tasks_2ms = generateTasks(2 * maxWorkers, () => delay(2, 420));
+        const tasks_2ms = generateTasks(2 * maxWorkers, function delayMaker() { return delay(2, 420); });
         const tasks_4ms = generateTasks(2 * maxWorkers, () => delay(4, 420));
         // The theoretical fastest completion time is 12ms, but we'll allow for a bit of leeway
         const processingCount = pool.add(...tasks_2ms);
         expect(processingCount).toBe(maxWorkers);
         pool.add(...tasks_4ms);
         expect(processingCount).toBe(maxWorkers);
+        let drainResults = [];
         // Start draining W/O awaiting
-        pool.drain(); 
+        const p1 = pool.drain();
+        const p2 = pool.drain();
+        const timerP1 = startRuntimeHelper();
+        drainResults.push(await p1);
+        expect(timerP1.getRuntime()).toBeLessThanOrEqual(6);
         // Add 10 'instant' tasks, shouldn't trip up in the `done()` call
-        pool.add(...generateTasks());
-        await delay(2);
-        expect(tasks_2ms[9]).toHaveBeenCalledTimes(1);
+        await delay(4);
+        expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
+        expect(timerP1.getRuntime()).toBeLessThan(20);
+        drainResults.push(await p2);
+        // console.log('drainResults', drainResults);
         await pool.drain();
-        expect(getRunTime()).toBeGreaterThanOrEqual(4);
-        await delay(8);
-        expect(tasks_4ms[9]).toHaveBeenCalledTimes(1);
+        expect(timerP1.getRuntime()).toBeLessThan(25 * 3);
+        expect(timerP1.getRuntime()).toBeGreaterThan(10);
+        await delay(38);
+        await pool.done();
+        // await delay(38);
+        expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
+        // console.dir(tasks_2ms.map(getMockStats), { depth: 10 });
+        expect(tasks_2ms[8]).toHaveBeenCalledTimes(1);
+        // expect(tasks_4ms[9]).toHaveBeenCalledTimes(1);
         return pool.done();
       });
     });
   });
 });
 
+// type MockedFunc = (...args: any[]) => any;
+
+// const getMockStats = <TFuncType extends MockedFunc>(
+//   mock: jest.MockedFunction<TFuncType> | jest.Mock
+// ) => {
+//   return {
+//     // name: mock?.mockName,
+//     calls: mock?.mock?.calls?.length,
+//     instances: mock?.mock?.instances?.length,
+//     lastCall:
+//       mock?.mock?.calls?.length ?? 0 > 0
+//         ? mock?.mock?.calls.slice(-1)
+//         : undefined,
+//   };
+// };
+
+describe('Test Helpers', () => {
+  test('runtime helper accurately measures time', async () => {
+    const timer = startRuntimeHelper();
+    await delay(3);
+    expect(timer.getRuntime()).toBeGreaterThanOrEqual(2);
+    expect(timer.getRuntime()).toBeLessThanOrEqual(30);
+  });
+});
+
+function startRuntimeHelper() {
+  const startTime = Date.now();
+  const getRuntime = () => Date.now() - startTime;
+  return { startTime, getRuntime };
+}
+
+type TaskCallback<TReturn> = (index?: number) => TReturn;
+
+// Nope, can't use TPromiseValue here, must be determined on the RHS of the `=` sign.
+// type TaskCallback<TReturn extends Promise<infer TPromiseValue>> = (index: number) => TPromiseValue;
+// type TaskCallback<TReturn> = (index: number) => TReturn
+
+// Needs the generic declared on left side of `=`
+// type TaskCallback = <TReturn extends number>(index: number) => Promise<TReturn>;
+
 function generateTasks(
   count: number = 10,
-  promiseFn: () => Promise<unknown> = () => Promise.resolve(420)
+  promiseFn: TaskCallback<Promise<number>> = (index?: number) =>
+    Promise.resolve(420)
 ) {
   return Array.from(
     {
       length: count,
     },
-    () => jest.fn(promiseFn)
+    (_, index) => jest.fn(() => promiseFn(index))
   );
 }

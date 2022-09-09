@@ -17,11 +17,14 @@ export default {
   globalName: 'PromisePool',
   clean: true,
   bundle: true,
-  dts: false,
+  // dts: {
+  //   resolve: true,
+  //   entry: 'src/index.ts',
+  // },
   metafile: true,
   minify: isProd,
   // skipNodeModulesBundle: singleBundleFile,
   splitting: true,
   sourcemap: true,
-  noExternal: [/lodash\/.*/, 'ms'],
+  noExternal: [/lodash.*/gim, /.*\/shared\.ts/gim, 'ms'],
 } as Options;

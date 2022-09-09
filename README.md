@@ -6,6 +6,21 @@
 
 A background task processor focused on reliability and scalability.
 
+| **Table of Contents**
+
+- [Promise Pool](#promise-pool)
+  - [Features](#features)
+  - [API](#api)
+    - [Install](#install)
+    - [Usage](#usage)
+      - [Simple](#simple)
+      - [Advanced](#advanced)
+        - [Singleton Pattern](#singleton-pattern)
+        - [Shared Pool: AWS Lambda & Middy](#shared-pool-aws-lambda--middy)
+        - [Shared Pool: Express Example](#shared-pool-express-example)
+  - [Changelog](#changelog)
+    - [v1.3 - **September 2022**](#v13---september-2022)
+
 ## Features
 
 - [x] Configurable.
@@ -15,13 +30,19 @@ A background task processor focused on reliability and scalability.
 - [x] Error handling.
 - [x] Singleton mode: Option to auto-reset when `.done()`. (Added `.drain()` method.)
 - [x] Task scheduling & prioritization.
-  - [x] Optionally `return` hints. (To support API's like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
+  - [x] Optionally `return` hints. (To support APIs like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
 <!-- - [x] ~~Progress events.~~ -->
 
-## Usage
+## API
 
-`PromisePool` exposes 2 methods: `.add(...tasks)` and `.done()`. This is to make it easy to implement & operate.
-Tasks added to the pool will begin executing immediately, with a concurrency limit as configured (default of `4`).
+`PromisePool` exposes 3 methods:
+
+- **`.add(...tasks)`** - add one (or more) tasks for background processing. (A task is a function that wraps a `Promise` value. e.g. `() => Promise.resolve(1)`).
+- **`.drain()`** - Returns a promise that resolves when all tasks have been processed, or when another thread calls `.drain()` mid-task execution. This is important to maximize performance in shared server environments, so _subsequent calls to `.drain()` will ensure only the last caller to `.drain()` will `await` until the completion of all tasks._
+- **`.done()`** - optionally finalize the pool. Returns a promise that resolves when all tasks are complete. _No more tasks can be added after this._
+
+<!-- This is to make it easy to implement & operate.
+Tasks added to the pool will begin executing immediately, with a concurrency limit as configured (default of `4`). -->
 
 ### Install
   
@@ -32,9 +53,9 @@ npm install @elite-libs/promise-pool
 yarn add @elite-libs/promise-pool
 ```
 
-### Examples
+### Usage
 
-#### Simplified Usage
+#### Simple
 
 ```typescript
 import PromisePool from '@elite-libs/promise-pool';
@@ -51,9 +72,11 @@ pool.add(() => expensiveBackgroundWork(data));
 await pool.done();
 ```
 
-#### Advanced Usage
+#### Advanced
 
-In this example we'll use a singleton pattern to ensure we have only 1 `Promise Pool` instance per process.
+##### Singleton Pattern
+
+In this example, we'll use a singleton pattern to ensure we have only 1 `Promise Pool` instance per process.
 
 ```typescript
 // `./src/services/taskPool.ts`
@@ -64,7 +87,7 @@ export const taskPool = new PromisePool({
 });
 ```
 
-Then from inside your app (Lambda function, Express app, etc.) you can use the `taskPool` instance to add tasks to the pool.
+Then from inside your app (Lambda function, Express app, etc.), you can use the `taskPool` instance to add tasks to the pool.
 
 ```typescript
 // Example Lambda function
@@ -85,10 +108,11 @@ export const handler = async (event, context) => {
 }
 ```
 
-Note the `await taskPool.drain()` call. This is required to ensure your tasks are executed.
+⚠️ Note the `await taskPool.drain()` call. This is required to ensure your tasks are executed.
 
 You could also utilize `Promise Pool` in [`middy`](https://middy.js.org/) middleware:
 
+<!--
 ##### Per-request pool instance
 
 ```typescript
@@ -113,8 +137,9 @@ const promisePoolMiddleware = (opts: Partial<PoolConfig> = {}) => {
 
 export default promisePoolMiddleware;
 ```
+-->
 
-##### Singleton pool instance middleware
+##### Shared Pool: AWS Lambda & Middy
 
 ```typescript
 // Important: Import a global instance of `Promise Pool`
@@ -140,7 +165,52 @@ request.context.taskPool.add(() => saveToS3(data));
 
 Now the `drain()` method will be called automatically `after()` every Lambda function returns.
 
+##### Shared Pool: Express Example
+
+```js
+// `./src/middleware/taskPool.ts`
+import { taskPool } from "../services/taskPool.mjs";
+
+export const taskPoolMiddleware = (req, res, next) => {
+  req.taskPool = taskPool;
+  next();
+};
+```
+  
+Then you can use `taskPool` in your Express app:
+
+```js
+import { taskPool } from "../services/taskPool.mjs";
+
+export const taskPoolMiddleware = (req, res, next) => {
+  req.taskPool = taskPool;
+  next();
+};
+```
+
 > See [`/examples`](/examples/) folder for more examples.
+
+## Changelog
+
+### v1.3 - **September 2022**
+
+- _What?_ Adds Smart `.drain()` behavior.
+  - _Why?_
+    1. Speeds up concurrent server environments!
+    1. prevents several types of difficult (ghost) bugs!
+        - stack overflows/mem access violations,
+        - exceeding rarely hit OS limits, (e.g. max open handle/file/socket limits)
+        - exceeding limits of Network hardware (e.g. connections/sec, total open socket limit, etc.)
+        - uneven observed wait times.
+  - _How?_ Only awaits the latest `.drain()` caller.
+  - _Who?_ `Server` + `Singleton` use cases will see a major benefit to this design.
+  - _Errata_
+    - Here are several competing (tortured) metaphors, please suggest more & let me know which makes the most sense.
+      - Like a relay race's series of baton handoffs. As soon as you hand off, your race is over & the next runner must either run until finish (wait to end) OR hand off the job to someone new.
+      - A tiny Queue, with a size of **one!**
+      - A 'Take-a-penny-leave-a-penny' tray, _big enough for exactly 1 penny._
+      - This is similar to the feature in MongoDB called the `Write Threshold/Concern` setting, or in Distributed SQL Replication where you can set a minimum # of confirmed 'server writes' before SQL considers it **safely written** in the cluster.
+      - Anectode: A group of friends had a rule that whoever is last to arrive must pay for the first friend (to arrive on time.)
 
 <!--
 ## Config Options
