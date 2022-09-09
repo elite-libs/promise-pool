@@ -1,4 +1,5 @@
-import { unpackPromise, delay } from './shared';
+import { head } from 'lodash';
+import { unpackPromise, UnpackedPromise } from './shared';
 
 export interface PoolConfig {
   maxWorkers: number;
@@ -66,11 +67,12 @@ class PromisePool {
 
   /** Used to manage a setInterval monitoring completion */
   private _backgroundIntervalTimer?: NodeJS.Timer;
-  private _backgroundIntervalPromise?: ReturnType<typeof unpackPromise<TaskResult[]>> = undefined;
-  private _lastDrain?: ReturnType< typeof unpackPromise<DrainSummary>> = undefined;
+  private _backgroundIntervalPromise?: UnpackedPromise<TaskResult[]> = undefined;
+  private _lastDrain: UnpackedPromise<any>[] = [];
   private _completionPromise?: Promise<void>;
-  private currentTaskIndex = -1;
   private _errors: Array<Error> = [];
+  
+  private currentTaskIndex = -1;
   private taskList: Array<AsyncTask | TaskResult> = [];
   private workPool: Array<Promise<unknown> | boolean | null> = [];
   private timestampCallback: TimerCallback;
@@ -87,6 +89,10 @@ class PromisePool {
       status: this.status,
 
       config: this.config,
+
+      promisedDrainCalls: this._lastDrain.length,
+      taskListStats: this.getTaskListStats(),
+      workPoolStats: this.getWorkPoolStats(),
     };
   }
 
@@ -113,37 +119,52 @@ class PromisePool {
    *
    */
   async drain() {
-    const previousDrain = this._lastDrain;
-    if (previousDrain) {
-      // create new promise, resolve old one - AFTER DELAY
-      delay(5).then(() => {
-        previousDrain.resolve({
-          taskCounts: {
-            completed: this.getCompletedTasks().length,
-            inProcessing: this.processingTaskCount(),
-          }
-        });
-      })
-    }
+    const nextPromise = this.resolveAndRotateDrainPromise();
     // // capture stack info
     // const fakeError = new Error('stack tracking helper');
     // console.log('fake', cleanStack(fakeError.stack))
-    this._lastDrain = unpackPromise();
 
     // Object.freeze(this.taskList);
     return Promise.race([
       this.done(),
-      this._lastDrain,
+      nextPromise.promise,
     ])
       .finally(() => {
-        /* istanbul ignore next - Check for tasks added after done() was called. */
-        if (this.currentTaskIndex >= this.taskList.length) {
-          /* istanbul ignore next - should never get called, just a failsafe against invalid state. */
-          throw Error(`New Tasks found after done() was called. Current Task Index ${this.currentTaskIndex} >= ${this.taskList.length}, Task List ${JSON.stringify(this.taskList)}`);
+        if (this.status === 'done') {
+          /* istanbul ignore next - Check for tasks added after done() was called. */
+          if (this.currentTaskIndex >= this.taskList.length) {
+            /* istanbul ignore next - should never get called, just a failsafe against invalid state. */
+            throw Error(`New Tasks found after done() was called. Current Task Index ${this.currentTaskIndex} >= ${this.taskList.length}, Task List ${JSON.stringify(this.taskList)}`);
+          }
+          // TODO: Add log to track forceResets here.
+  
+          return this.forceReset();
         }
-
-        return this.forceReset();
       });
+  }
+
+  /** Utilizes `this.resolveHeadDrain()` */
+  private resolveAndRotateDrainPromise() {
+    this.resolveHeadDrain();
+    return this.addDrainPromise();
+  }
+  /** Adds unpackedPromise to head of array */
+  private addDrainPromise() {
+    const nextPromise = unpackPromise();
+    this._lastDrain.unshift(nextPromise);
+    return nextPromise;
+  }
+  private resolveHeadDrain() {
+    const topDrain = head(this._lastDrain);
+    if (topDrain) {
+      topDrain.resolve({
+        timestamp: this.timestampCallback(),
+        taskCounts: {
+          completed: this.getCompletedTasks().length,
+          inProcessing: this.processingTaskCount(),
+        }
+      });
+    }
   }
 
   /**
@@ -151,7 +172,7 @@ class PromisePool {
    * @returns
    */
   done() {
-    if (this._lastDrain != null) return this._lastDrain;
+    // if (this._lastDrain != null) return this._lastDrain.promise;
     if (this._backgroundIntervalPromise != null) {
       return this._backgroundIntervalPromise.promise;
     }
@@ -160,13 +181,15 @@ class PromisePool {
     }
     this.status = 'running';
     this._backgroundIntervalPromise = unpackPromise<TaskResult[]>();
+    // TODO: Log if interval is running
+    // Begin background consumption of task list using `checkIfComplete()`
     this._backgroundIntervalTimer = this._backgroundIntervalTimer
-     || setInterval(this.checkIfComplete.bind(this),
-       this.config.backgroundRecheckInterval);
+     || setInterval(this.checkIfComplete, this.config.backgroundRecheckInterval);
     return this._backgroundIntervalPromise.promise;
   }
 
   private forceReset() {
+    // TODO: Add logging to verify expected # of taskList items, currentTaskIndex, workPool
     this.currentTaskIndex = -1;
     this.status = 'initialized';
     this.taskList = [];
@@ -176,7 +199,7 @@ class PromisePool {
     this._backgroundIntervalTimer = undefined;
     this._completionPromise = undefined;
     this._backgroundIntervalPromise = undefined;
-    this._lastDrain = undefined;
+    this._lastDrain = [];
     return this;
   }
 
@@ -196,6 +219,7 @@ class PromisePool {
       // Now we need to wait for the pool to finish (or verify it has finished)
       this._completionPromise = Promise.allSettled(this.workPool)
         .then(() => {
+          // TODO: Add log here
           if (this._backgroundIntervalPromise != null) {
             this._backgroundIntervalPromise.resolve(this.getCompletedTasks());
             this.status = 'done';
@@ -300,11 +324,47 @@ class PromisePool {
     return bigDiff;
   }
 
+  /** Helper for runtime debugging & stats. See `this._stats`. */
+  private getTaskListStats() {
+    return this.taskList.reduce((summary, task) => {
+      /* istanbul ignore next */
+      if (task instanceof Promise) {
+        /* istanbul ignore next */
+        summary.pending++;
+      } else if ('index' in task && task.status === 'resolved') {
+        /* istanbul ignore next */
+        summary.resolved++;
+      } else if ('index' in task && task.status === 'rejected') {
+        /* istanbul ignore next */
+        summary.rejected++;
+      }
+      return summary;
+    }, {pending: 0, resolved: 0, rejected: 0, taskListLength: this.taskList.length});
+  }
+
+  /** Helper for runtime debugging & stats. See `this._stats`. */
+  private getWorkPoolStats() {
+    return this.workPool.reduce((summary, task) => {
+      /* istanbul ignore next */
+      if (task instanceof Promise) {
+        /* istanbul ignore next */
+        summary.pending++;
+        /* istanbul ignore next */
+      } else if (task === true || task === false) {
+        /* istanbul ignore next */
+        summary[task ? 'succeeded' : 'failed']++;
+      }
+      return summary;
+    }, {pending: 0, succeeded: 0, failed: 0, workPoolLength: this.workPool.length});    
+  }
+
+
   constructor(config: Partial<PoolConfig> = defaultConfig()) {
     this.config = Object.freeze({
       ...defaultConfig(),
       ...config,
     });
+    // TODO: Add logging to track config
     this.timestampCallback = this.config.timestampCallback || (() => Number.NaN);
     this.add = this.add.bind(this);
     this.done = this.done.bind(this);
@@ -319,12 +379,12 @@ class PromisePool {
   }
 }
 
-const cleanStack = (stack?: string | string[]) => {
-  if (!stack) return [];
-  if (typeof stack === 'string') stack = stack.split('\n');
-  if (!Array.isArray(stack)) throw new Error(`Invalid stack! Expected Array, received ${typeof stack}`);
-  return stack?.filter((line) => (line.includes('mock') || /[Jj]est/g.test(line)) === false) || stack;
-}
+// const cleanStack = (stack?: string | string[]) => {
+//   if (!stack) return [];
+//   if (typeof stack === 'string') stack = stack.split('\n');
+//   if (!Array.isArray(stack)) throw new Error(`Invalid stack! Expected Array, received ${typeof stack}`);
+//   return stack?.filter((line) => (line.includes('mock') || /[Jj]est/g.test(line)) === false) || stack;
+// }
 
 function defaultConfig(): PoolConfig {
   return {

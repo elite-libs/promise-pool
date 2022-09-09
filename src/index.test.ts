@@ -1,17 +1,17 @@
 import Pool from './index';
 import { delay } from './shared';
+import util from 'util';
+const { inspect } = util;
 
 describe('PromisePool', () => {
-
   describe('Smart drain technology', () => {
-    
     it('should await only last task', async () => {
       const TASK_DELAY_MS = 10;
-      const pool = new Pool({ maxWorkers: 4 });
-      const drainSpy = jest.spyOn(pool, 'drain')
+      const pool = new Pool({ maxWorkers: 5 });
+      // const drainSpy = jest.spyOn(pool, 'drain');
 
-      let {getRuntime} = startRuntimeHelper();
-      const tasks = generateTasks(20, (index) => delay(TASK_DELAY_MS, index));
+      let { getRuntime } = startRuntimeHelper();
+      const tasks = generateTasks(10, (index) => delay(TASK_DELAY_MS, index));
       pool.add(...tasks);
       // Save some promises returned by calling `.drain()` (and don't await yet)
       const initialDrainPromise = pool.drain();
@@ -23,19 +23,24 @@ describe('PromisePool', () => {
       // And `secondDrainPromise` should wait 10-20ms
       await secondDrainPromise;
       await pool.drain();
-      // @ts-expect-error
-      console.log('drainSpy:', getRuntime(), getMockStats(drainSpy));
-      console.log('drain results:', drainSpy.mock.results);
-      
+      // console.log('drainSpy:', getRuntime(), getMockStats(drainSpy));
+      // console.dir(drainSpy.mock.results, { depth: 10 });
+      // console.dir(
+      //   await Promise.all(drainSpy.mock.results.map((p) => p.value)),
+      //   { depth: 10 }
+      // );
+
       await pool.done();
-      // @ts-expect-error
-      console.log('drainSpy2:', getRuntime(), getMockStats(drainSpy), pool._stats);
-      expect(getRuntime()).toBeLessThan((2.5 * TASK_DELAY_MS) + 1);
-      expect(getRuntime()).toBeGreaterThanOrEqual((2 * TASK_DELAY_MS));
-
-      
+      // console.log(
+      //   'drainSpy2:',
+      //   getRuntime(),
+      //   // @ts-expect-error
+      //   getMockStats(drainSpy),
+      //   pool._stats
+      // );
+      expect(getRuntime()).toBeLessThan(3.5 * TASK_DELAY_MS);
+      expect(getRuntime()).toBeGreaterThanOrEqual(2 * TASK_DELAY_MS);
     });
-
   });
 
   describe('Core functionality', () => {
@@ -50,8 +55,8 @@ describe('PromisePool', () => {
     });
 
     test('can run multiple batches of tasks (singleton mode)', async () => {
-      const pool = new Pool();
-      const taskList = generateTasks(8);
+      const pool = new Pool({ maxWorkers: 4, backgroundRecheckInterval: 1 });
+      const taskList = generateTasks(8, (index) => delay(1, index));
       pool.add(...taskList);
       expect(pool._stats.currentTaskIndex).toBe(3);
       await pool.drain();
@@ -228,71 +233,75 @@ describe('PromisePool', () => {
       return p;
     });
 
-    // describe.only('Edge cases', () => {
-    //   test('can handle multiple tasks & multiple calls to `.drain()`', async () => {
-    //     const maxWorkers = 5;
-    //     const pool = new Pool({ maxWorkers });
-    //     const tasks_2ms = generateTasks(2 * maxWorkers, function delayMaker() { return delay(2, 420); });
-    //     const tasks_4ms = generateTasks(2 * maxWorkers, () => delay(4, 420));
-    //     // The theoretical fastest completion time is 12ms, but we'll allow for a bit of leeway
-    //     const processingCount = pool.add(...tasks_2ms);
-    //     expect(processingCount).toBe(maxWorkers);
-    //     pool.add(...tasks_4ms);
-    //     expect(processingCount).toBe(maxWorkers);
-    //     let drainResults = [];
-    //     // Start draining W/O awaiting
-    //     const p1 = pool.drain();
-    //     const p2 = pool.drain();
-    //     const timerP1 = startRuntimeHelper();
-    //     drainResults.push(await p1);
-    //     expect(timerP1.getRuntime()).toBeLessThan(2);
-    //     // Add 10 'instant' tasks, shouldn't trip up in the `done()` call
-    //     await delay(4);
-    //     expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
-    //     expect(timerP1.getRuntime()).toBeLessThan(8);
-    //     drainResults.push(await p2);
-    //     console.log('drainResults', drainResults);
-    //     await pool.drain();
-    //     expect(timerP1.getRuntime()).toBeLessThan(15);
-    //     expect(timerP1.getRuntime()).toBeGreaterThan(3);
-    //     await delay(38);
-    //     await pool.done();
-    //     await delay(38);
-    //     expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
-    //     console.dir(tasks_2ms.map(getMockStats), { depth: 10 });
-    //     expect(tasks_2ms[8]).toHaveBeenCalledTimes(1);
-    //     // expect(tasks_4ms[9]).toHaveBeenCalledTimes(1);
-    //     return pool.done();
-    //   });
-    // });
+    describe('Edge cases', () => {
+      test('can handle multiple tasks & multiple calls to `.drain()`', async () => {
+        const maxWorkers = 5;
+        const pool = new Pool({ maxWorkers });
+        const tasks_2ms = generateTasks(2 * maxWorkers, function delayMaker() { return delay(2, 420); });
+        const tasks_4ms = generateTasks(2 * maxWorkers, () => delay(4, 420));
+        // The theoretical fastest completion time is 12ms, but we'll allow for a bit of leeway
+        const processingCount = pool.add(...tasks_2ms);
+        expect(processingCount).toBe(maxWorkers);
+        pool.add(...tasks_4ms);
+        expect(processingCount).toBe(maxWorkers);
+        let drainResults = [];
+        // Start draining W/O awaiting
+        const p1 = pool.drain();
+        const p2 = pool.drain();
+        const timerP1 = startRuntimeHelper();
+        drainResults.push(await p1);
+        expect(timerP1.getRuntime()).toBeLessThan(2);
+        // Add 10 'instant' tasks, shouldn't trip up in the `done()` call
+        await delay(4);
+        expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
+        expect(timerP1.getRuntime()).toBeLessThan(8);
+        drainResults.push(await p2);
+        // console.log('drainResults', drainResults);
+        await pool.drain();
+        expect(timerP1.getRuntime()).toBeLessThan(24 * 1.25);
+        expect(timerP1.getRuntime()).toBeGreaterThan(12);
+        await delay(38);
+        await pool.done();
+        await delay(38);
+        expect(tasks_2ms[1]).toHaveBeenCalledTimes(1);
+        // console.dir(tasks_2ms.map(getMockStats), { depth: 10 });
+        expect(tasks_2ms[8]).toHaveBeenCalledTimes(1);
+        // expect(tasks_4ms[9]).toHaveBeenCalledTimes(1);
+        return pool.done();
+      });
+    });
   });
 });
 
-type MockedFunc =  (...args: any[]) => any;
+// type MockedFunc = (...args: any[]) => any;
 
-const getMockStats = <TFuncType extends MockedFunc>(mock: jest.MockedFunction<TFuncType>) => {
-  return {
-    // name: mock?.mockName,
-    calls: mock?.mock?.calls?.length,
-    instances: mock?.mock?.instances?.length,
-    lastCall: mock?.mock?.calls?.length ?? 0 > 0? mock?.mock?.calls.slice(-1) : undefined,
-  }
-};
+// const getMockStats = <TFuncType extends MockedFunc>(
+//   mock: jest.MockedFunction<TFuncType> | jest.Mock
+// ) => {
+//   return {
+//     // name: mock?.mockName,
+//     calls: mock?.mock?.calls?.length,
+//     instances: mock?.mock?.instances?.length,
+//     lastCall:
+//       mock?.mock?.calls?.length ?? 0 > 0
+//         ? mock?.mock?.calls.slice(-1)
+//         : undefined,
+//   };
+// };
 
-describe('sanity test startRuntimeHelper', () => {
-  
-  test('can get runtime', async () => {
+describe('Test Helpers', () => {
+  test('runtime helper accurately measures time', async () => {
     const timer = startRuntimeHelper();
-    await delay(10);
-    expect(timer.getRuntime()).toBeGreaterThanOrEqual(9);
-    expect(timer.getRuntime()).toBeLessThanOrEqual(12);
+    await delay(3);
+    expect(timer.getRuntime()).toBeGreaterThanOrEqual(2);
+    expect(timer.getRuntime()).toBeLessThanOrEqual(7);
   });
 });
 
 function startRuntimeHelper() {
   const startTime = Date.now();
   const getRuntime = () => Date.now() - startTime;
-  return {startTime, getRuntime};
+  return { startTime, getRuntime };
 }
 
 type TaskCallback<TReturn> = (index?: number) => TReturn;
@@ -306,7 +315,8 @@ type TaskCallback<TReturn> = (index?: number) => TReturn;
 
 function generateTasks(
   count: number = 10,
-  promiseFn: TaskCallback<Promise<number>> = (index?: number) => Promise.resolve(420)
+  promiseFn: TaskCallback<Promise<number>> = (index?: number) =>
+    Promise.resolve(420)
 ) {
   return Array.from(
     {
@@ -315,4 +325,3 @@ function generateTasks(
     (_, index) => jest.fn(() => promiseFn(index))
   );
 }
-

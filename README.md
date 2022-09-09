@@ -18,10 +18,16 @@ A background task processor focused on reliability and scalability.
   - [x] Optionally `return` hints. (To support API's like GitHub which return rate limit hints in http headers, e.g. `X-RateLimit-Remaining` header.)
 <!-- - [x] ~~Progress events.~~ -->
 
-## Usage
+## API
 
-`PromisePool` exposes 2 methods: `.add(...tasks)` and `.done()`. This is to make it easy to implement & operate.
-Tasks added to the pool will begin executing immediately, with a concurrency limit as configured (default of `4`).
+`PromisePool` exposes 3 methods:
+
+- **`.add(...tasks)`** - add one (or more) tasks for background processing. (A task is a function that wraps a `Promise` value. e.g. `() => Promise.resolve(1)`).
+- **`.drain()`** - Returns a promise that resolves when all tasks have been processed, or when another thread calls `.drain()` mid-task execution. This is important to maximize performance in shared server environments, so _subsequent calls to `.drain()` will ensure only the last caller to `.drain()` will `await` until the completion of all tasks._
+- **`.done()`** - optionally finalize the pool. Returns a promise that resolves when all tasks are complete. _No more tasks can be added after this._
+
+<!-- This is to make it easy to implement & operate.
+Tasks added to the pool will begin executing immediately, with a concurrency limit as configured (default of `4`). -->
 
 ### Install
   
@@ -34,7 +40,8 @@ yarn add @elite-libs/promise-pool
 
 ## New Features
 
-### **September, 2022**
+### v1.3 - **September 2022****
+
 
 - _What?_ Adds Smart `.drain()` behavior.
   - _Why?_
@@ -44,17 +51,17 @@ yarn add @elite-libs/promise-pool
         - exceeding rarely hit OS limits, (e.g. max open handle/file/socket limits)
         - exceeding limits of Network hardware (e.g. connections/sec, total open socket limit, etc.)
         - uneven observed wait times.
-  - _How?_ Only awaits for the latest `.drain()` caller.
-  - _Who?_ `Server` + `Singleton` use cases will see most of the benefit.
+  - _How?_ Only awaits the latest `.drain()` caller.
+  - _Who?_ `Server` + `Singleton` use cases will see a major benefit to this design.
   - _Errata_
-    - There's several competing (tortured) metaphors, please suggest more & let me know which makes most sense.
-      - Like a relay race's series of baton handoffs. As soon as you handoff, your race is over & the next runner must either run until finish (wait to end) OR hand-off the job to someone new.
-      - A tiny Queue, with size of **one!**
-      - Anectode: Group of friends who had rule: whoever is latest/last has to pay for the planned outing.
-      - A 'Take-a-penny-leave-a-penny' dish only big enough for 1 penny.
-      - This is similar to the feature in MongoDB called the `Write Threshold/Concern` setting, or in Distributed SQL Replication where you can set a minimum # of servers which must accept and confirm the data before it's considered **safely written** in the cluster.
+    - Here are several competing (tortured) metaphors, please suggest more & let me know which makes the most sense.
+      - Like a relay race's series of baton handoffs. As soon as you hand off, your race is over & the next runner must either run until finish (wait to end) OR hand off the job to someone new.
+      - A tiny Queue, with a size of **one!**
+      - A 'Take-a-penny-leave-a-penny' tray, _big enough for exactly 1 penny._
+      - This is similar to the feature in MongoDB called the `Write Threshold/Concern` setting, or in Distributed SQL Replication where you can set a minimum # of confirmed 'server writes' before SQL considers it **safely written** in the cluster.
+      - Anectode: A group of friends had a rule that whoever is last to arrive must pay for the first friend (to arrive on time.)
 
-### Examples
+### Usage
 
 #### Simplified Usage
 
