@@ -258,7 +258,7 @@ describe('PromisePool', () => {
         drainResults.push(await p2);
         // console.log('drainResults', drainResults);
         await pool.drain();
-        expect(timerP1.getRuntime()).toBeLessThan(25 * 2.5);
+        expect(timerP1.getRuntime()).toBeLessThan(25 * 3);
         expect(timerP1.getRuntime()).toBeGreaterThan(12);
         await delay(38);
         await pool.done();
