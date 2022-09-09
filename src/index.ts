@@ -1,5 +1,7 @@
-import { head } from 'lodash';
-import { unpackPromise, UnpackedPromise } from './shared';
+/* eslint-disable no-plusplus */
+/* eslint-disable no-param-reassign */
+import type { UnpackedPromise } from './shared';
+import { unpackPromise } from './shared';
 
 export interface PoolConfig {
   maxWorkers: number;
@@ -39,12 +41,12 @@ type TaskResult = {
   }
 );
 
-interface DrainSummary {
-  taskCounts: {
-    inProcessing: number;
-    completed: number;
-  }
-}
+// interface DrainSummary {
+//   taskCounts: {
+//     inProcessing: number;
+//     completed: number;
+//   };
+// }
 
 /**
  * Worker pool for running tasks in parallel.
@@ -68,10 +70,11 @@ class PromisePool {
   /** Used to manage a setInterval monitoring completion */
   private _backgroundIntervalTimer?: NodeJS.Timer;
   private _backgroundIntervalPromise?: UnpackedPromise<TaskResult[]> = undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _lastDrain: UnpackedPromise<any>[] = [];
   private _completionPromise?: Promise<void>;
   private _errors: Array<Error> = [];
-  
+
   private currentTaskIndex = -1;
   private taskList: Array<AsyncTask | TaskResult> = [];
   private workPool: Array<Promise<unknown> | boolean | null> = [];
@@ -137,9 +140,9 @@ class PromisePool {
             throw Error(`New Tasks found after done() was called. Current Task Index ${this.currentTaskIndex} >= ${this.taskList.length}, Task List ${JSON.stringify(this.taskList)}`);
           }
           // TODO: Add log to track forceResets here.
-  
           return this.forceReset();
         }
+        return this.status;
       });
   }
 
@@ -155,14 +158,17 @@ class PromisePool {
     return nextPromise;
   }
   private resolveHeadDrain() {
-    const topDrain = head(this._lastDrain);
+    const topDrain = Array.isArray(this._lastDrain) && this._lastDrain.length > 0
+      ? this._lastDrain[0]
+      : undefined;
+
     if (topDrain) {
       topDrain.resolve({
         timestamp: this.timestampCallback(),
         taskCounts: {
           completed: this.getCompletedTasks().length,
           inProcessing: this.processingTaskCount(),
-        }
+        },
       });
     }
   }
@@ -184,6 +190,7 @@ class PromisePool {
     // TODO: Log if interval is running
     // Begin background consumption of task list using `checkIfComplete()`
     this._backgroundIntervalTimer = this._backgroundIntervalTimer
+     // eslint-disable-next-line @typescript-eslint/unbound-method
      || setInterval(this.checkIfComplete, this.config.backgroundRecheckInterval);
     return this._backgroundIntervalPromise.promise;
   }
@@ -297,7 +304,7 @@ class PromisePool {
               };
             })
             .finally(() => {
-              this.consumeNextTask()
+              this.consumeNextTask();
             });
         } else {
           const error = new Error(`Invalid Task! Tasks must return a Thenable/Promise-like object: Received ${typeof workItem}`);
@@ -317,6 +324,7 @@ class PromisePool {
     if (this.config.timestampCallback.length >= 1) {
       return this.config.timestampCallback(timestamp);
     }
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const bigDiff = BigInt(this.config.timestampCallback()) - BigInt(timestamp!);
     if (bigDiff < BigInt(Number.MAX_SAFE_INTEGER)) {
       return Number(bigDiff.toString());
@@ -339,7 +347,9 @@ class PromisePool {
         summary.rejected++;
       }
       return summary;
-    }, {pending: 0, resolved: 0, rejected: 0, taskListLength: this.taskList.length});
+    }, {
+      pending: 0, resolved: 0, rejected: 0, taskListLength: this.taskList.length,
+    });
   }
 
   /** Helper for runtime debugging & stats. See `this._stats`. */
@@ -355,9 +365,10 @@ class PromisePool {
         summary[task ? 'succeeded' : 'failed']++;
       }
       return summary;
-    }, {pending: 0, succeeded: 0, failed: 0, workPoolLength: this.workPool.length});    
+    }, {
+      pending: 0, succeeded: 0, failed: 0, workPoolLength: this.workPool.length,
+    });
   }
-
 
   constructor(config: Partial<PoolConfig> = defaultConfig()) {
     this.config = Object.freeze({
