@@ -21,7 +21,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "lib": ["ES2020", "ESNext.Promise"],
+    "lib": ["ES2021", "ESNext.Promise"],
     "module": "CommonJS",
     "moduleResolution": "node",
     "noFallthroughCasesInSwitch": true,
@@ -43,7 +43,8 @@
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.js"
+    "src/**/*.js",
+    "shared.ts"
   ],
   "exclude": [
     "__mocks__",

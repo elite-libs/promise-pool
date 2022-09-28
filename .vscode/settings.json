@@ -1,7 +1,6 @@
 {
   "markdown.extension.preview.autoShowPreviewToSide": false,
   "editor.formatOnSave": false,
-  "eslint.enable": false,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
