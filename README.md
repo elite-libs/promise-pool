@@ -1,4 +1,4 @@
-# Promise Pool
+# Promise Pool 🏖️
 
 [![CI Status](https://github.com/elite-libs/promise-pool/workflows/test/badge.svg)](https://github.com/elite-libs/promise-pool/actions)
 [![NPM version](https://img.shields.io/npm/v/@elite-libs/promise-pool.svg)](https://www.npmjs.com/package/@elite-libs/promise-pool)
@@ -8,35 +8,37 @@ A background task processor focused on performance, reliability, and durability.
 
 | **Table of Contents**
 
-- [Promise Pool](#promise-pool)
-  - [Features](#features)
-  - [API](#api)
-    - [Install](#install)
-    - [Usage](#usage)
-      - [Simple](#simple)
-      - [Advanced](#advanced)
-        - [Singleton Pattern](#singleton-pattern)
-        - [Shared Pool: AWS Lambda & Middy](#shared-pool-aws-lambda--middy)
-        - [Shared Pool: Express Example](#shared-pool-express-example)
-  - [Changelog](#changelog)
-    - [v1.3 - **September 2022**](#v13---september-2022)
+- [Smart Multi-Threaded Execution](#smart-multi-threaded-execution)
+  - [Key `Promise Pool` Features](#key-promise-pool-features)
+  - [Who needs a `Promise Pool`?](#who-needs-a-promise-pool)
+- [Features](#features)
+- [API](#api)
+- [Install](#install)
+- [Usage](#usage)
+  - [Basic Example](#basic-example)
+- [Patterns](#patterns)
+  - [Shared Global Pool (Singleton Pattern)](#shared-global-pool-singleton-pattern)
+  - [Multiple Pools (Factory Pattern)](#multiple-pools-factory-pattern)
+- [Recipes for Lambda \& Express](#recipes-for-lambda--express)
+  - [Shared Pool: AWS Lambda \& Middy](#shared-pool-aws-lambda--middy)
+  - [Shared Pool: Express Example](#shared-pool-express-example)
+- [Changelog](#changelog)
+  - [v1.3 - **September 2022**](#v13---september-2022)
 
-## Visual: Smart Multi-Threaded Execution
+## Smart Multi-Threaded Execution
 
 > Diagram of Promise Pool's 'Minimal Blocking' design
 
 <img src="/public/PromisePool-drain-behavior-draft-2022-09-13.png" alt="Diagram: Visual of our minimal blocking design" />
 
-### Why `Promise Pool` Is Essential
+### Key `Promise Pool` Features
 
 Promise Pool strives to excel at 4 key goals:
 
 1. Durability - won't fail in unpredictable ways - even under extreme load.
 1. Extensible by Design - supports Promise-based libraries (examples include: [retry handling](#p-retry), [debounce/throttle](#p-retry), [paged results loader](#github-api-downloader))
 1. Reliability - control your pool with: total runtime limit (align to max HTTP/Lambda request limit), idle timeout (catch orphan or zombie situations), plus a worker limit.
-1. Performance - the work pool queue uses a speedy Ring Buffer design pattern!* 
-
-> Remember, **_DERP_** for short.
+1. Performance - the work pool queue uses a speedy Ring Buffer design pattern!*
 
 \* Since this is JavaScript, our Ring Buffer is more like three JS Arrays in a trenchcoat.
 
@@ -55,7 +57,7 @@ Under normal traffic, and certainly in development Nodejs is VERY forgiving of t
 Since this issue is fundamentally about exceeding an invisible traffic threshold, **no code change is required** AND many error **logging services will fail to record it.** It's not uncommon for these issues to surface in strange & random ways, often going unnoticed for a while. Another key factor here is _most_ testing software isn't designed to easily simulate traffic & measure request runtime against some SLA. This is a challenging area to automate. Since mocking any external requests will interfere with meaningful analysis, all tests & observations must be made against either real (production) or real-ish (AKA a private clone of production) systems.
 
 
-<!-- Unlimited background tasks or too many foreground  will situation can cause silent failures, often   is a particular annoying type of issue, as it usually comes up when a service has grown to rely on many API integrations.  issue, by its nature, can prevent observability via typical methods (no RAM can imply a failure to log to DataDog or Sentry). -->
+<!-- Unlimited background tasks or too many foreground will situation can cause silent failures, often   is a particular annoying type of issue, as it usually comes up when a service has grown to rely on many API integrations.  issue, by its nature, can prevent observability via typical methods (no RAM can imply a failure to log to DataDog or Sentry). -->
 
 Let's talk performance, most services don't prioritize the task(s) that affect the response sent to the user. Ironically, once the need to split async work between blocking and non-blocking becomes clear (where) and  user-facing  need for background or non-blocking async tasks arises, the code base has become too complex to easily refactor.
 
@@ -122,7 +124,25 @@ const pool = new PromisePool();
 
 ## Patterns
 
-### Allow Creating Many Pools (Factory Pattern)
+### Shared Global Pool (Singleton Pattern)
+
+> **Recommended for all** Node-based servers and services, and any other async & promise based apps.
+
+The singleton pattern here ensures we have only 1 `Promise Pool` instance 'globally' (per process).
+
+When using a "Singleton Pattern," the `maxWorkers` value will act as a **global limit** on the number of tasks allowed **in-progress at any given time.**
+
+#### **File `/services/taskPoolSingleton.ts`**
+
+```typescript
+import PromisePool from '@elite-libs/promise-pool';
+
+export const taskPool = new PromisePool({
+  maxWorkers: 6, // Optional. Default is `4`.
+});
+```
+
+### Multiple Pools (Factory Pattern)
 
 Here a Factory Function (a fancy name for a _function that makes things_) is used to standardize options for this particular app.
 
@@ -138,51 +158,9 @@ export function taskPoolFactory() {
 }
 ```
 
-### Shared Global Pool (Singleton Pattern)
-
-> **Recommended for all** Node-based servers and services, and any other async & promise based apps.
-
-The singleton pattern here ensures we have only 1 `Promise Pool` instance 'globally' (per process).
-
-When using a "Singleton Pattern," the `maxWorkers` value will act as a **global limit** on the number of tasks allowed **in-progress at any given time.**
-
-#### **File `/services/taskPoolSingleton.ts`**
-
-```typescript
-import PromisePool from '@elite-libs/promise-pool';
-
-export const taskPoolSingleton = new PromisePool({
-  maxWorkers: 6, // Optional. Default is `4`.
-});
-```
-
 <!-- Then from inside your app (Lambda function, Express app, etc.), you can use the `taskPool` instance to add tasks to the pool. -->
 
-## Recipes: AWS Lambda & Promise Pool
-
-### Simple Lambda & `Promise Pool` Usage
-
-#### **File 2/2 `/handlers/user.handler.ts`**
-
-```typescript
-import { taskPool } from './services/taskPoolSingleton';
-export const handler = async (event, context) => {
-  const data = getDataFromEvent(event);
-  taskPool.add(() => logMetrics(data));
-  taskPool.add(() => saveToS3(request));
-  taskPool.add(() => expensiveBackgroundWork(data));
-  await taskPool.drain();
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: 'Success',
-    }),
-  }
-}
-```
-
-⚠️ Note the `await taskPool.drain()` call. This is required to ensure your tasks are executed.
+## Recipes for Lambda & Express
 
 ### Shared Pool: AWS Lambda & Middy
 
@@ -297,6 +275,35 @@ app.post('/users/', function post(request, response, next) {
 app.use(taskPoolMiddleware.cleanup);
 ```
 
+<!-- ### Lambda & `Promise Pool` Usage
+
+#### **File `/handlers/user.handler.ts`**
+
+```typescript
+import { taskPool } from './services/taskPoolSingleton';
+
+export const handler = async (event, context) => {
+  const data = getDataFromEvent(event);
+
+// The following tasks will execute (roughly) at the same time
+  taskPool.add(() => logMetrics(data));
+  taskPool.add(() => saveToS3(request));
+  taskPool.add(() => expensiveBackgroundWork(data));
+  
+// Calling `await taskPool.drain()` will wait for all tasks to complete.
+  await taskPool.drain();
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: 'Success',
+    }),
+  }
+}
+```
+
+⚠️ Note the `await taskPool.drain()` call. This is required to ensure your tasks are executed. -->
+
 ## Changelog
 
 ### v1.3 - **September 2022**
@@ -312,5 +319,3 @@ app.use(taskPoolMiddleware.cleanup);
 - _How?_ Only awaits the latest `.drain()` caller.
 - _Who?_ `Server` + `Singleton` use cases will see a major benefit to this design.
 - _Huh?_ [See diagram](#visual-smart-multi-threaded-execution)
-
-
