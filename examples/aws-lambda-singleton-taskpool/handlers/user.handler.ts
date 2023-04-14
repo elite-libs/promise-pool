@@ -1,12 +1,13 @@
-import { taskPool } from '../services/taskPool';
+import middy from '@middy/core';
 import { taskPoolMiddleware } from '../taskPoolMiddleware';
 
 const handler = async (event, context) => {
+  const { taskPool } = event.context;
+
   const data = getDataFromEvent(event);
   
-  context.taskPool.add(() => saveToS3(data));
-  context.taskPool.add(() => expensiveBackgroundWork(data));
-  await context.taskPool.drain();
+  taskPool.add(() => saveToS3(data));
+  taskPool.add(() => expensiveBackgroundWork(data));
 
   return {
     statusCode: 200,
@@ -19,6 +20,4 @@ const handler = async (event, context) => {
 export default middy(handler)
   .use(jsonBodyParser())
   .use(taskPoolMiddleware())
-  .use(httpErrorHandler())
-
-  
+  .onError(httpErrorHandler())

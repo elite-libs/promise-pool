@@ -4,7 +4,9 @@
 [![NPM version](https://img.shields.io/npm/v/@elite-libs/promise-pool.svg)](https://www.npmjs.com/package/@elite-libs/promise-pool)
 [![GitHub stars](https://img.shields.io/github/stars/elite-libs/promise-pool.svg?style=social)](https://github.com/elite-libs/promise-pool)
 
-A background task processor focused on performance, reliability, and durability.
+> A background task processor focused on performance, reliability, and durability.
+
+TLDR; An upgraded Promise queue that's essentially a stateful `Promise.all()` wrapper.
 
 | **Table of Contents**
 
@@ -15,15 +17,14 @@ A background task processor focused on performance, reliability, and durability.
 - [API](#api)
 - [Install](#install)
 - [Usage](#usage)
-  - [Basic Example](#basic-example)
-- [Patterns](#patterns)
-  - [Shared Global Pool (Singleton Pattern)](#shared-global-pool-singleton-pattern)
-  - [Multiple Pools (Factory Pattern)](#multiple-pools-factory-pattern)
-- [Recipes for Lambda \& Express](#recipes-for-lambda--express)
-  - [Shared Pool: AWS Lambda \& Middy](#shared-pool-aws-lambda--middy)
-  - [Shared Pool: Express Example](#shared-pool-express-example)
+  - [Minimal Example](#minimal-example)
+  - [Singleton Pattern](#singleton-pattern)
+- [Recipes](#recipes)
+  - [AWS Lambda \& Middy](#aws-lambda--middy)
+  - [Express Middleware](#express-middleware)
 - [Changelog](#changelog)
-  - [v1.3 - **September 2022**](#v13---september-2022)
+  - [v1.3.1 - **April 2023**](#v131---april-2023)
+  - [v1.3.0 - **September 2022**](#v130---september-2022)
 
 ## Smart Multi-Threaded Execution
 
@@ -36,32 +37,18 @@ A background task processor focused on performance, reliability, and durability.
 Promise Pool strives to excel at 4 key goals:
 
 1. Durability - won't fail in unpredictable ways - even under extreme load.
-1. Extensible by Design - supports Promise-based libraries (examples include: [retry handling](#p-retry), [debounce/throttle](#p-retry), [paged results loader](#github-api-downloader))
-1. Reliability - control your pool with: total runtime limit (align to max HTTP/Lambda request limit), idle timeout (catch orphan or zombie situations), plus a worker limit.
-1. Performance - the work pool queue uses a speedy Ring Buffer design pattern!*
+2. Extensible by Design - supports Promise-based libraries (examples include: [retry handling](https://github.com/sindresorhus/p-retry), [debounce/throttle](https://github.com/sindresorhus/p-throttle))
+3. Reliability - control your pool with a total runtime limit (align to max HTTP/Lambda request limit), idle timeout (catch orphan or zombie situations), plus a concurrent worker limit.
+4. Performance - the work pool queue uses a speedy Ring Buffer design!*
 
 \* Since this is JavaScript, our Ring Buffer is more like three JS Arrays in a trenchcoat.
 
 ### Who needs a `Promise Pool`?
 
-Imagine a Node Service (or Lambda function) that suddenly gets an avalanche of _near_ simultaneous requests. Each request then causes its own cascade of async work: logging, querying, paging, batching, filtering, data platforms, CMS, event triggers, behavioral analytics, etc.
-
-> 🚀 Does this sound familiar? You're in the right place, keep reading! 📚
-
-Under normal traffic, and certainly in development Nodejs is VERY forgiving of the `YOLO Async Pattern`, AKA no particular patterns at all. After all, we have things like `Promise.all()`! Without limits of any kind!
-
-> _Look ma,_ millions of Promises! No consequences! Well, not quite...
-> Eventually _Durability_, _Reliability_ and _Performance_ will suffer with increased timeouts, exhausted RAM/CPU, stack overflows, and fire & brimstone!
-<!-- Users may experience partial page loads, infinite spinners, and could see ugly tech details (stack traces.) -->
-
-Since this issue is fundamentally about exceeding an invisible traffic threshold, **no code change is required** AND many error **logging services will fail to record it.** It's not uncommon for these issues to surface in strange & random ways, often going unnoticed for a while. Another key factor here is _most_ testing software isn't designed to easily simulate traffic & measure request runtime against some SLA. This is a challenging area to automate. Since mocking any external requests will interfere with meaningful analysis, all tests & observations must be made against either real (production) or real-ish (AKA a private clone of production) systems.
-
-
-<!-- Unlimited background tasks or too many foreground will situation can cause silent failures, often   is a particular annoying type of issue, as it usually comes up when a service has grown to rely on many API integrations.  issue, by its nature, can prevent observability via typical methods (no RAM can imply a failure to log to DataDog or Sentry). -->
-
-Let's talk performance, most services don't prioritize the task(s) that affect the response sent to the user. Ironically, once the need to split async work between blocking and non-blocking becomes clear (where) and  user-facing  need for background or non-blocking async tasks arises, the code base has become too complex to easily refactor.
-
-<!-- I often see slow designs where users end up waiting after their response is ready, usually to allow post processing or logging. however only a **tiny fraction of those calls are needed** to show the user what they want. "real" work for the user, and plenty of non-urgent & important work. each with 20-50 background tasks. threads  -->
+- Any Node Services (Lambda functions, etc.) which does background work, defined as:
+  - Long-running async function(s),
+    - where the `return` value isn't used (in the current request.)
+    - And failures are handled by logging.
 
 ## Features
 
@@ -99,11 +86,7 @@ yarn add @elite-libs/promise-pool
 
 ## Usage
 
-In the examples below you will see 2 similar names used: `taskPool` and `PromisePool`.
-
-A `taskPool` or `pool` refers to a **specific instance** of this library (named `Promise Pool` by `@elite-libs`.)
-
-### Basic Example
+### Minimal Example
 
 ```typescript
 import PromisePool from '@elite-libs/promise-pool';
@@ -122,15 +105,13 @@ const pool = new PromisePool();
 })();
 ```
 
-## Patterns
+### Singleton Pattern
 
-### Shared Global Pool (Singleton Pattern)
+> **Recommended** for virtually all projects. (API, CLI, Lambda, Frontend, etc.)
 
-> **Recommended for all** Node-based servers and services, and any other async & promise based apps.
+The singleton pattern creates exactly 1 `Promise Pool` - as soon as the script is imported (typically on the first run).
 
-The singleton pattern here ensures we have only 1 `Promise Pool` instance 'globally' (per process).
-
-When using a "Singleton Pattern," the `maxWorkers` value will act as a **global limit** on the number of tasks allowed **in-progress at any given time.**
+This ensures the `maxWorkers` value will act as a **global limit** on the number of tasks that can run at the same time.
 
 #### **File `/services/taskPoolSingleton.ts`**
 
@@ -142,7 +123,7 @@ export const taskPool = new PromisePool({
 });
 ```
 
-### Multiple Pools (Factory Pattern)
+<!-- ### Multiple Pools (Factory Pattern)
 
 Here a Factory Function (a fancy name for a _function that makes things_) is used to standardize options for this particular app.
 
@@ -156,40 +137,48 @@ export function taskPoolFactory() {
     maxWorkers: 6, // Optional. Default is `4`.
   });
 }
-```
+``` -->
 
 <!-- Then from inside your app (Lambda function, Express app, etc.), you can use the `taskPool` instance to add tasks to the pool. -->
 
-## Recipes for Lambda & Express
+## Recipes
 
-### Shared Pool: AWS Lambda & Middy
+See examples below, or check out the [`/examples`](/examples/) folder for more complete examples.
 
-`Promise Pool` fits in [`middy`](https://middy.js.org/) middleware:
+### AWS Lambda & Middy
 
-#### **File 1/2 `services/taskPoolSingleton.ts`**
+`Promise Pool` in some [`middy`](https://middy.js.org/) middleware:
+
+#### **File 1/2 `./services/taskPoolMiddleware.ts`**
+
+**Note:** The imported `taskPool` is a [singleton instance defined in the `taskPoolSingleton` file](#singleton-pattern).
 
 ```typescript
 import { taskPool } from './services/taskPoolSingleton';
 
-const taskPoolMiddleware = () => ({
-  before: (event) => {
-    Object.assign(event.context, { taskPool });
+export const taskPoolMiddleware = () => ({
+  before: (request) => {
+    Object.assign(request.context, { taskPool });
   },
-  after: async (event) => {
-    await event.context.taskPool.drain();
+  after: async (request) => {
+    await request.context.taskPool.drain();
   }
 });
-
-export default taskPoolMiddleware;
 ```
 
 Now you can use `taskPool` in your Lambda function via `event.context.taskPool`:
 
-#### **File 2/2 `/handlers/example.handler.ts`**
+#### **File 2/2 `./handlers/example.handler.ts`**
 
 ```typescript
-export const handler = async (event, context) => {
+import middy from '@middy/core';
+import { taskPoolMiddleware } from './services/taskPoolMiddleware';
+
+const handleEvent = (event) => {
+  const { taskPool } = event.context;
+
   const data = getDataFromEvent(event);
+
   taskPool.add(() => saveToS3(data));
   taskPool.add(() => expensiveBackgroundWork(data));
   
@@ -201,78 +190,82 @@ export const handler = async (event, context) => {
   }
 }
 
+export const handler = middy(handleEvent)
+  .use(taskPoolMiddleware());
+
 ```
 
-Now the `drain()` method will be called automatically `after()` every Lambda function returns.
+<!-- The `.drain()` method will be called automatically `after()` every Lambda function returns. -->
 
-### Shared Pool: Express Example
+### Express Middleware
 
-#### **File 1/2 `/services/taskPoolSingleton.mjs`**
+#### **File 1/3 `/services/taskPoolSingleton.mjs`**
 
 ```js
-import PromisePool from '@elite-libs/promise-pool';
+import PromisePool from '@elite-libs/promise-pool'
 
-export const taskPoolSingleton = new PromisePool({
-  maxWorkers: 6, // Optional. Default is `4`.
-});
+export const taskPool = new PromisePool({
+  maxWorkers: 6 // Optional. Default is `4`.
+})
 ```
 
-#### **File 1/2 `/middleware/taskPool.middleware.mjs`**
+#### **File 2/3 `/middleware/taskPool.middleware.mjs`**
 
 ```js
-import { taskPoolSingleton } from "../services/taskPoolSingleton.mjs";
+import { taskPool } from "../services/taskPoolSingleton.mjs";
 
 const taskPoolMiddleware = {
   setup: (request, response, next) => {
-    request.taskPool = taskPool;
-    next();
+    request.taskPool = taskPool
+    next()
   },
   cleanup: (request, response, next) => {
     if (request.taskPool && 'drain' in request.taskPool) {
-      taskPool.drain();
+      taskPool.drain()
     }
-    next();
+    next()
   }
-};
+}
 
-export default taskPoolMiddleware;
+export default taskPoolMiddleware
 ```
 
 To use the `taskPoolMiddleware` in your Express app, you'd include `taskPoolMiddleware.setup()` and `taskPoolMiddleware.cleanup()`.
 
-#### **File 1/2 `/app.mjs`**
+#### **File 3/3 `/app.mjs`**
 
 ```js
-import tpMiddleware from "../middleware/taskPool.middleware.mjs";
+import taskPoolMiddleware from "../middleware/taskPool.middleware.mjs"
 
 export const app = express()
 
 // Step 1/2: Setup the taskPool
 app.use(taskPoolMiddleware.setup)
 app.use(express.bodyParser())
+
 app.post('/users/', function post(request, response, next) {
-    const { taskPool } = request;
+    const { taskPool } = request
 
-    const data = getDataFromBody(request.body);
+    const data = getDataFromBody(request.body)
 
-    // You can .add() tasks where ever needed,
+    // You can .add() tasks wherever needed,
     //   - they'll run in the background.
-    taskPool.add(() => logMetrics(data));
-    taskPool.add(() => saveToS3(request));
-    taskPool.add(() => expensiveBackgroundWork(data));
+    taskPool.add(() => logMetrics(data))
+    taskPool.add(() => saveToS3(request))
+    taskPool.add(() => expensiveBackgroundWork(data))
     
     // Or, 'schedule' multiple tasks at once.
-    const tasks = [
+    taskPool.add(
       () => logMetrics(data), 
       () => saveToS3(request),
       () => expensiveBackgroundWork(data)
-    ]
-    taskPool.add(...tasks);
+    )
 
-    next();
+    next()
   })
+
 // Step 2/2: Drain the taskPool
-app.use(taskPoolMiddleware.cleanup);
+app.use(taskPoolMiddleware.cleanup)
 ```
 
 <!-- ### Lambda & `Promise Pool` Usage
@@ -306,7 +299,12 @@ export const handler = async (event, context) => {
 
 ## Changelog
 
-### v1.3 - **September 2022**
+### v1.3.1 - **April 2023**
+
+- Upgraded dev dependencies (dependabot).
+- Cleaned up README code & description.
+
+### v1.3.0 - **September 2022**
 
 - _What?_ Adds Smart `.drain()` behavior.
 - _Why?_
@@ -318,4 +316,4 @@ export const handler = async (event, context) => {
       - uneven observed wait times.
 - _How?_ Only awaits the latest `.drain()` caller.
 - _Who?_ `Server` + `Singleton` use cases will see a major benefit to this design.
-- _Huh?_ [See diagram](#visual-smart-multi-threaded-execution)
+- _Huh?_ [See diagram](#smart-multi-threaded-execution)
